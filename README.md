@@ -1,90 +1,110 @@
 # VulnAdvisor
 
-Plain-language CVE triage and remediation guidance for vulnerability management teams.
+> Plain-language CVE triage and remediation guidance, built for security teams who need answers, not more data.
 
-No API keys required. No paywalls. All data is pulled from free, authoritative public sources.
+No API keys. No paywalls. All data from free, authoritative public sources.
+
+---
+
+## The Problem
+
+Vulnerability management teams are drowning in findings.
+
+Scanners produce hundreds (sometimes thousands) of CVEs per cycle. Each one comes with a CVSS score, a wall of technical text, and a list of affected CPEs that means nothing to most of the people who need to act on it. The result is familiar to anyone who has worked in VM:
+
+- Analysts spend hours researching each finding manually
+- Non-technical stakeholders can't understand what the risk actually means
+- Teams struggle to prioritize; everything looks urgent, so nothing gets fixed fast enough
+- Patches get missed not because people don't care, but because the signal is buried in noise
+
+Enterprise tools like Tenable, Qualys, and Rapid7 solve parts of this problem, but they cost tens of thousands of dollars a year and are out of reach for smaller security teams, MSPs, and organizations just building out their VM practice.
+
+**VulnAdvisor fills that gap.**
+
+---
+
+## Who This Is For
+
+- **Security analysts** who need to triage a backlog of CVEs quickly and accurately
+- **VM engineers** who want plain-language remediation steps alongside the raw data
+- **IT administrators** who are responsible for patching but don't have a security background
+- **MSPs and consultants** who manage vulnerability programs for multiple clients
+- **Small and mid-size security teams** that can't justify enterprise VM tool pricing
+- **SOC teams** who need to quickly assess the real-world risk of a newly published CVE
+
+If you've ever copied a CVE ID into Google and spent 20 minutes piecing together what it means and what to do, this tool is for you.
 
 ---
 
 ## What It Does
 
-Paste in a CVE ID and get back:
+Provide a CVE ID and get back a complete triage brief in seconds:
 
-- **Triage priority** (P1–P4) with a clear time-to-fix recommendation
-- **Plain-language explanation** of what the vulnerability is and what an attacker could do
-- **Exploitation status** — is it being actively exploited right now? (CISA KEV)
-- **Exploit probability** — statistical likelihood it will be exploited (EPSS)
-- **Public PoC status** — are there working proof-of-concept exploits on GitHub?
-- **Remediation steps** — what to patch, what version to upgrade to, and any workarounds
+- **Triage priority** (P1–P4) with a clear time-to-fix recommendation based on real-world risk signals
+- **Plain-language explanation** of what the vulnerability is, in terms anyone can understand
+- **Exploitation status** showing whether it is actively being weaponized right now (CISA KEV)
+- **Exploit probability** giving the statistical likelihood of exploitation in the next 30 days (EPSS)
+- **Public PoC status** indicating whether working proof-of-concept exploits are publicly available
+- **Remediation steps** covering what to patch, what version to upgrade to, and any workarounds if patching isn't immediate
+
+The output is designed to be useful to two audiences at once: technical enough for an analyst to act on, plain enough for a manager to understand.
+
+---
+
+## What Makes This Different
+
+Most CVE lookup tools show you the same data that's already on NVD, just formatted differently. VulnAdvisor layers multiple risk signals together to give you a **triage decision**, not just information:
+
+| Signal | Source | Why It Matters |
+|--------|--------|----------------|
+| CVSS Score | NVD / NIST | Baseline severity from the vulnerability itself |
+| Active Exploitation | CISA KEV | Is this being used against real targets right now? |
+| Exploit Probability | EPSS (FIRST.org) | Statistical likelihood of exploitation in the wild |
+| Public PoC | PoC-in-GitHub | Are working exploits freely available to attackers? |
+
+A CVE with a 7.5 CVSS score that is actively exploited, has a 60% EPSS score, and 30 public PoC repos is not a "fix within 30 days" problem. It's a "fix today" problem. VulnAdvisor makes that call automatically.
 
 ---
 
 ## Data Sources
 
+All sources are free and require no registration or API keys.
+
 | Source | What it provides |
 |--------|-----------------|
-| [NVD (NIST)](https://nvd.nist.gov/) | CVE details, CVSS scores, affected products |
+| [NVD (NIST)](https://nvd.nist.gov/) | CVE details, CVSS scores, affected products, patch versions |
 | [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | Actively exploited vulnerabilities catalog |
 | [EPSS (FIRST.org)](https://www.first.org/epss/) | Exploit prediction probability score |
-| [PoC-in-GitHub](https://github.com/nomi-sec/PoC-in-GitHub) | Public proof-of-concept exploit repos |
-
-All free. No registration needed.
+| [PoC-in-GitHub](https://github.com/nomi-sec/PoC-in-GitHub) | Public proof-of-concept exploit repositories |
 
 ---
 
 ## Setup
 
-### 1. Prerequisites
+### Prerequisites
 
 - Python 3.9 or later
-- `pip` (comes with Python)
+- `pip` (included with Python)
 
-Check your version:
 ```bash
 python3 --version
 ```
 
-### 2. Clone the repository
+### Install
 
 ```bash
+# Clone the repo
 git clone https://github.com/jtberry/vuln-advisor.git
 cd vuln-advisor
-```
 
-### 3. Create a virtual environment
-
-This keeps the project dependencies isolated from your system Python.
-
-```bash
-# Create the virtual environment
+# Create and activate a virtual environment
 python3 -m venv venv
+source venv/bin/activate          # Linux / macOS
+venv\Scripts\activate.bat         # Windows (Command Prompt)
+venv\Scripts\Activate.ps1         # Windows (PowerShell)
 
-# Activate it
-# On Linux / macOS:
-source venv/bin/activate
-
-# On Windows (Command Prompt):
-venv\Scripts\activate.bat
-
-# On Windows (PowerShell):
-venv\Scripts\Activate.ps1
-```
-
-You should see `(venv)` appear at the start of your terminal prompt.
-
-### 4. Install dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
-
-### 5. (Optional) Environment file
-
-No API keys are required for core functionality. If you want to set up future AI-enhanced features:
-
-```bash
-cp .env.example .env
-# Edit .env and add any keys
 ```
 
 ---
@@ -103,17 +123,25 @@ python main.py CVE-2021-44228
 python main.py CVE-2021-44228 CVE-2023-44487 CVE-2024-1234
 ```
 
-### Get structured JSON output (for scripting or integrations)
+### Get structured JSON output
+
+Useful for piping into other tools or scripts.
 
 ```bash
 python main.py CVE-2021-44228 --json
 ```
 
-### Save output to a file
+### Save a report to file
 
 ```bash
 python main.py CVE-2021-44228 > report.txt
 python main.py CVE-2021-44228 --json > report.json
+```
+
+### Deactivate the virtual environment when done
+
+```bash
+deactivate
 ```
 
 ---
@@ -134,50 +162,62 @@ python main.py CVE-2021-44228 --json > report.json
   ──────────────────────────────────────────────────────────────────
     CVSS Score          10.0/10 (CRITICAL)
     Actively Exploited  YES — On CISA Known Exploited List
-    Exploit Probability 97.6%  (higher than 99.9% of all CVEs)
-    Public PoC          YES — 200+ public repo(s) found
-...
+    Exploit Probability 94.4%  (higher than 99.9% of all CVEs)
+    Public PoC          YES — 392 public repo(s) found
+
+  WHAT IS IT?
+  ──────────────────────────────────────────────────────────────────
+    Type:  Improper Input Validation
+
+    A flaw in Apache Log4j (a popular Java logging library) that lets an
+    attacker run any command on your system by sending a specially crafted
+    message that gets logged by the application.
+
+  WHAT DO I DO?
+  ──────────────────────────────────────────────────────────────────
+    1. [PATCH     ]  Upgrade Apache Log4j to 2.17.1 or later
+    2. [WORKAROUND]  Set LOG4J_FORMAT_MSG_NO_LOOKUPS=true if patching
+                     is not immediately possible
 ```
 
 ---
 
 ## Triage Priority Levels
 
-| Priority | Time to Fix | When |
-|----------|-------------|------|
-| **P1** | Within 24 hours | Critical CVSS + actively exploited or high EPSS |
-| **P2** | Within 7 days | High CVSS + public PoC or elevated EPSS |
-| **P3** | Within 30 days | Medium severity |
+| Priority | Fix Within | Triggered When |
+|----------|------------|----------------|
+| **P1** | 24 hours | Critical CVSS + actively exploited or EPSS ≥ 50% |
+| **P2** | 7 days | High CVSS + public PoC or EPSS ≥ 30% |
+| **P3** | 30 days | Medium severity |
 | **P4** | Next patch cycle | Low severity |
-
----
-
-## Deactivating the Virtual Environment
-
-When you're done, deactivate the venv:
-
-```bash
-deactivate
-```
 
 ---
 
 ## Roadmap
 
-- [ ] Bulk CVE processing from scanner exports
-- [ ] Web UI
-- [ ] Jira / ServiceNow ticket creation
+- [ ] Bulk CVE processing from vulnerability scanner exports
+- [ ] Web UI for team use
 - [ ] Remediation tracking (open → in progress → resolved)
-- [ ] Team workspaces
+- [ ] Jira / ServiceNow ticket creation
+- [ ] Team workspaces and shared reporting
 
 ---
 
 ## Contributing
 
-Pull requests welcome. Please open an issue first to discuss significant changes.
+Pull requests are welcome. If you're adding a new data source, CWE mapping, or remediation template, please open an issue first to discuss the approach.
+
+For dev setup:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+All commits run formatting (black, isort), linting (ruff), and security checks (bandit, pip-audit) automatically.
 
 ---
 
 ## License
 
-MIT — free to use, modify, and distribute. See [LICENSE](LICENSE).
+MIT. Free to use, modify, and distribute. See [LICENSE](LICENSE).
