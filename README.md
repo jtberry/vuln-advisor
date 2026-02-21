@@ -47,7 +47,7 @@ python3 --version
 ### 2. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/vuln-advisor.git
+git clone https://github.com/jtberry/vuln-advisor.git
 cd vuln-advisor
 ```
 
@@ -164,7 +164,6 @@ deactivate
 
 ## Roadmap
 
-- [ ] Tanium Comply export import (CSV/JSON)
 - [ ] Bulk CVE processing from scanner exports
 - [ ] Web UI
 - [ ] Jira / ServiceNow ticket creation
