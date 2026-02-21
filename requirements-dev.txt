@@ -1,0 +1,7 @@
+# Development tools — not needed to run the tool, only for contributors
+pre-commit>=3.5.0
+black>=24.0.0
+isort>=5.13.0
+ruff>=0.8.0
+bandit>=1.7.0
+pip-audit>=2.7.0

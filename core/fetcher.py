@@ -3,19 +3,19 @@ fetcher.py — All external data fetching.
 All sources are free and require no API keys.
 """
 
-import sys
-from typing import Optional, Set, Dict, Any
+from typing import Any, Optional
+
 import requests
 
-NVD_API       = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-CISA_KEV_URL  = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-EPSS_API      = "https://api.first.org/data/v1/epss"
-POC_GITHUB    = "https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/{year}/{cve_id}.json"
+NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+EPSS_API = "https://api.first.org/data/v1/epss"
+POC_GITHUB = "https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/{year}/{cve_id}.json"
 
-_kev_cache: Optional[Set[str]] = None
+_kev_cache: Optional[set[str]] = None
 
 
-def fetch_nvd(cve_id: str) -> Optional[Dict[str, Any]]:
+def fetch_nvd(cve_id: str) -> Optional[dict[str, Any]]:
     """Fetch raw CVE record from NVD."""
     try:
         resp = requests.get(NVD_API, params={"cveId": cve_id}, timeout=10)
@@ -27,7 +27,7 @@ def fetch_nvd(cve_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def fetch_kev() -> Set[str]:
+def fetch_kev() -> set[str]:
     """Fetch CISA Known Exploited Vulnerabilities catalog (cached for session)."""
     global _kev_cache
     if _kev_cache is not None:
@@ -44,7 +44,7 @@ def fetch_kev() -> Set[str]:
         return _kev_cache
 
 
-def fetch_epss(cve_id: str) -> Dict[str, Any]:
+def fetch_epss(cve_id: str) -> dict[str, Any]:
     """Fetch EPSS exploitation probability score from FIRST.org."""
     try:
         resp = requests.get(EPSS_API, params={"cve": cve_id}, timeout=10)
@@ -60,7 +60,7 @@ def fetch_epss(cve_id: str) -> Dict[str, Any]:
     return {"score": None, "percentile": None}
 
 
-def fetch_poc(cve_id: str) -> Dict[str, Any]:
+def fetch_poc(cve_id: str) -> dict[str, Any]:
     """
     Check PoC-in-GitHub for public proof-of-concept repos.
     Repo: https://github.com/nomi-sec/PoC-in-GitHub

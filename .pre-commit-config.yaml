@@ -1,0 +1,47 @@
+repos:
+  # ── General file hygiene ────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace       # remove trailing spaces
+      - id: end-of-file-fixer         # ensure files end with a newline
+      - id: check-yaml                # validate YAML syntax
+      - id: check-toml                # validate TOML syntax
+      - id: check-merge-conflict      # catch leftover merge conflict markers
+      - id: check-added-large-files   # warn if large files are accidentally staged
+        args: ["--maxkb=500"]
+      - id: detect-private-key        # block commits that contain private keys
+
+  # ── Formatting: black ───────────────────────────────────────────────────
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  # ── Import sorting: isort ───────────────────────────────────────────────
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  # ── Linting: ruff ───────────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]   # auto-fix safe issues (unused imports, etc.)
+
+  # ── Security: bandit (code scanning) ───────────────────────────────────
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.0
+    hooks:
+      - id: bandit
+        args: ["--skip", "B101", "--exclude", "venv,.venv,tests"]
+        files: ^(core|main)\.py|^core/
+
+  # ── Security: pip-audit (dependency CVE scanning) ──────────────────────
+  - repo: https://github.com/pypa/pip-audit
+    rev: v2.7.3
+    hooks:
+      - id: pip-audit
+        args: ["-r", "requirements.txt"]

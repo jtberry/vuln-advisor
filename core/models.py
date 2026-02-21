@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
@@ -21,19 +21,19 @@ class CVSSDetails:
 class PoCInfo:
     has_poc: bool = False
     count: int = 0
-    sources: List[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
 
 
 @dataclass
 class RemediationStep:
-    action: str   # PATCH | WORKAROUND | REFERENCE
+    action: str  # PATCH | WORKAROUND | REFERENCE
     description: str
 
 
 @dataclass
 class Reference:
     url: str
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     name: str = ""
 
 
@@ -49,10 +49,10 @@ class EnrichedCVE:
     epss_score: Optional[float]
     epss_percentile: Optional[float]
     poc: PoCInfo
-    triage_priority: str    # P1 / P2 / P3 / P4
+    triage_priority: str  # P1 / P2 / P3 / P4
     triage_label: str
     triage_reason: str
-    affected_products: List[str]
-    patch_versions: List[str]
-    remediation: List[RemediationStep]
-    references: List[Reference]
+    affected_products: list[str]
+    patch_versions: list[str]
+    remediation: list[RemediationStep]
+    references: list[Reference]

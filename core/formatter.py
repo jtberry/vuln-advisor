@@ -4,18 +4,19 @@ formatter.py — Renders EnrichedCVE to terminal output or JSON.
 
 import json
 from dataclasses import asdict
+
 from .models import EnrichedCVE
 
 W = 68  # output width
 
 PRIORITY_COLORS = {
-    "P1": "\033[91m",   # red
-    "P2": "\033[93m",   # yellow
-    "P3": "\033[94m",   # blue
-    "P4": "\033[92m",   # green
+    "P1": "\033[91m",  # red
+    "P2": "\033[93m",  # yellow
+    "P3": "\033[94m",  # blue
+    "P4": "\033[92m",  # green
 }
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
+RESET = "\033[0m"
+BOLD = "\033[1m"
 
 
 def _bar(char="═") -> str:
@@ -30,7 +31,7 @@ def _wrap(text: str, indent: int = 4, width: int = W) -> str:
     """Simple word-wrap at `width` chars with leading indent."""
     words = text.split()
     lines = []
-    line  = " " * indent
+    line = " " * indent
     for word in words:
         if len(line) + len(word) + 1 > width:
             lines.append(line)
@@ -65,12 +66,11 @@ def print_terminal(cve: EnrichedCVE) -> None:
     print(f"    Actively Exploited  {kev_val}")
 
     if cve.epss_score is not None:
-        pct  = round(cve.epss_score * 100, 1)
+        pct = round(cve.epss_score * 100, 1)
         tile = round(cve.epss_percentile * 100, 1) if cve.epss_percentile else 0
         print(f"    Exploit Probability  {pct}%  (higher than {tile}% of all CVEs)")
 
-    poc_val = (f"\033[91m{BOLD}YES — {cve.poc.count} public repo(s) found{RESET}"
-               if cve.poc.has_poc else "None found")
+    poc_val = f"\033[91m{BOLD}YES — {cve.poc.count} public repo(s) found{RESET}" if cve.poc.has_poc else "None found"
     print(f"    Public PoC     {poc_val}")
 
     # ── What Is It ──────────────────────────────────────────────────────────
@@ -86,11 +86,11 @@ def print_terminal(cve: EnrichedCVE) -> None:
     print(_section("HOW CAN IT BE ATTACKED?"))
     cvss = cve.cvss
     for label, val in [
-        ("Who can attack",       cvss.attack_vector),
-        ("Complexity",           cvss.attack_complexity),
-        ("Login required",       cvss.privileges_required),
-        ("User action needed",   cvss.user_interaction),
-        ("Blast radius",         cvss.scope),
+        ("Who can attack", cvss.attack_vector),
+        ("Complexity", cvss.attack_complexity),
+        ("Login required", cvss.privileges_required),
+        ("User action needed", cvss.user_interaction),
+        ("Blast radius", cvss.scope),
     ]:
         if val:
             print(f"    {label:<22}  {val}")
@@ -99,7 +99,7 @@ def print_terminal(cve: EnrichedCVE) -> None:
     print(_section("WHAT COULD AN ATTACKER DO?"))
     for label, val in [
         ("Data confidentiality", cvss.confidentiality),
-        ("Data integrity",       cvss.integrity),
+        ("Data integrity", cvss.integrity),
         ("Availability / uptime", cvss.availability),
     ]:
         if val and val != "NONE":
@@ -126,8 +126,7 @@ def print_terminal(cve: EnrichedCVE) -> None:
             print(f"    • {src}")
 
     # ── References ──────────────────────────────────────────────────────────
-    patch_refs = [r for r in cve.references
-                  if any(t in ("Patch", "Vendor Advisory", "Mitigation") for t in r.tags)]
+    patch_refs = [r for r in cve.references if any(t in ("Patch", "Vendor Advisory", "Mitigation") for t in r.tags)]
     if patch_refs:
         print(_section("PATCH / ADVISORY REFERENCES"))
         for ref in patch_refs[:5]:
