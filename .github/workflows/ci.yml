@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dev dependencies
+        run: pip install black isort ruff
+
+      - name: black — check formatting
+        run: black --check --diff .
+
+      - name: isort — check import order
+        run: isort --check-only --diff .
+
+      - name: ruff — lint
+        run: ruff check .
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: bandit — static code security scan
+        run: bandit --skip B101 --exclude venv,.venv,tests -r core/ main.py
+
+      - name: pip-audit — dependency vulnerability scan
+        run: pip-audit -r requirements.txt
+
+  secrets:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so gitleaks can scan all commits in the PR
+
+      - name: gitleaks — detect hardcoded secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  smoke-test:
+    name: Import Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify package imports cleanly
+        run: python -c "from core.fetcher import fetch_nvd, fetch_kev, fetch_epss, fetch_poc; from core.enricher import enrich; from core.formatter import print_terminal, to_json; print('All imports OK')"
