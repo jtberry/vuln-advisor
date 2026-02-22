@@ -6,6 +6,20 @@ No API keys. No paywalls. All data from free, authoritative public sources.
 
 ---
 
+## Why This Exists
+
+I work in vulnerability management. Every day, security teams face the same grind: a scanner dumps hundreds of CVEs, each one looking equally urgent, and the people who need to act on them either don't have the time to research them properly or don't have the background to know what the raw data actually means.
+
+I got tired of spending 20 minutes per CVE doing the same manual steps: look it up on NVD, cross-reference CISA KEV, check EPSS, search GitHub for PoCs, piece together what it means, write it up in plain English for a stakeholder who just needs to know whether to drop everything or add it to the next sprint.
+
+Enterprise VM tools solve this. But they cost tens of thousands of dollars a year. Smaller teams, MSPs, and anyone building out a VM practice from scratch are priced out entirely.
+
+VulnAdvisor is my attempt to close that gap. Free, open source, no API keys, no accounts. Just paste in a CVE ID and get back a clear triage decision with the context you need to act on it.
+
+It is also a portfolio project. I am building this in public to demonstrate what a production-quality security tool looks like from the ground up: clean architecture, automated code quality checks, real data sources, and a clear path from a CLI tool toward a SaaS product.
+
+---
+
 ## The Problem
 
 Vulnerability management teams are drowning in findings.
