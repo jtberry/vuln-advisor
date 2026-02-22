@@ -149,6 +149,47 @@ def print_terminal(cve: EnrichedCVE) -> None:
     print(f"\n{_bar()}\n")
 
 
+def print_summary(cves: list[EnrichedCVE]) -> None:
+    """Print a prioritized summary table for a list of CVEs — P1 first, P4 last."""
+    PRIORITY_ORDER = ["P1", "P2", "P3", "P4"]
+    PRIORITY_LABELS = {
+        "P1": "Fix within 24 hours",
+        "P2": "Fix within 7 days",
+        "P3": "Fix within 30 days",
+        "P4": "Next patch cycle",
+    }
+
+    by_priority: dict[str, list[EnrichedCVE]] = {p: [] for p in PRIORITY_ORDER}
+    for cve in cves:
+        by_priority.setdefault(cve.triage_priority, []).append(cve)
+
+    print(f"\n{BOLD}{_bar()}{RESET}")
+    print(f"  {BOLD}PRIORITY SUMMARY — {len(cves)} CVEs analysed{RESET}")
+    print(f"{BOLD}{_bar()}{RESET}")
+
+    for priority in PRIORITY_ORDER:
+        group = by_priority.get(priority, [])
+        if not group:
+            continue
+
+        p_color = PRIORITY_COLORS.get(priority, "")
+        label = PRIORITY_LABELS.get(priority, "")
+        header = f"{priority} — {label}"
+        count = f"({len(group)})"
+        print(f"\n  {p_color}{BOLD}{header:<46}{count}{RESET}")
+        print(f"  {'─' * (W - 2)}")
+
+        for cve in group:
+            score = f"{cve.cvss.score:.1f}" if cve.cvss.score else " N/A"
+            severity = cve.cvss.severity[:8]
+            kev_tag = f"{BOLD}\033[91mKEV{RESET}" if cve.is_kev else "   "
+            poc_tag = f"{BOLD}\033[91mPoC{RESET}" if cve.poc.has_poc else "   "
+            cwe = cve.cwe_name[:30] if cve.cwe_name else "Unknown"
+            print(f"  {cve.id:<18} {score:>4}  {severity:<9} {kev_tag}  {poc_tag}  {cwe}")
+
+    print(f"\n{_bar()}\n")
+
+
 def to_json(cve: EnrichedCVE) -> str:
     """Return a JSON-serializable dict — ready for future API use."""
     d = asdict(cve)
