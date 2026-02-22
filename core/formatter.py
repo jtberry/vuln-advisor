@@ -118,6 +118,16 @@ def print_terminal(cve: EnrichedCVE) -> None:
         print(f"\n    {i}. {BOLD}{tag}{RESET}")
         print(_wrap(step.description, indent=8))
 
+    # ── Compensating Controls ────────────────────────────────────────────────
+    if cve.compensating_controls:
+        print(_section("IF PATCHING IS NOT IMMEDIATE"))
+        print("    Reduce risk with these controls while you work toward a fix.\n")
+        for control in cve.compensating_controls:
+            print(_wrap(f"• {control}", indent=4))
+        if cve.sigma_link:
+            DIM = "\033[2m"
+            print(f"\n    {DIM}Detection rules (Sigma): {cve.sigma_link}{RESET}")
+
     # ── PoC Sources ─────────────────────────────────────────────────────────
     if cve.poc.sources:
         print(_section("PUBLIC PROOF-OF-CONCEPT REPOS"))

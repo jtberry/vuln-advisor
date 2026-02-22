@@ -11,132 +11,255 @@ from .models import CVSSDetails, EnrichedCVE, PoCInfo, Reference, RemediationSte
 # CWE — plain-language name, description, and generic remediation
 # ---------------------------------------------------------------------------
 
-CWE_MAP: dict[str, dict[str, str]] = {
+CWE_MAP: dict[str, dict] = {
     "CWE-20": {
         "name": "Improper Input Validation",
         "plain": "The software doesn't properly check data it receives, allowing attackers to send malicious input.",
         "fix": "Validate and sanitize all input before processing.",
+        "controls": [
+            "Deploy a WAF with rules targeting malformed or unexpected input patterns.",
+            "Enable application-level logging of input validation failures to detect probing.",
+            "Rate-limit endpoints that accept external input to slow automated attack attempts.",
+        ],
     },
     "CWE-22": {
         "name": "Path Traversal",
         "plain": "An attacker can trick the software into accessing files outside its intended directory.",
         "fix": "Restrict file access to expected directories. Never construct file paths from user input.",
+        "controls": [
+            "Enable WAF rules targeting path traversal patterns (../, %2e%2e, encoded variants).",
+            "Monitor filesystem access logs for requests containing directory traversal sequences.",
+            "Run the application process in a chroot jail or container to limit filesystem access.",
+        ],
     },
     "CWE-78": {
         "name": "OS Command Injection",
         "plain": "An attacker can make the software run operating system commands of their choosing.",
         "fix": "Avoid passing user input to shell commands. Use safe API alternatives.",
+        "controls": [
+            "Monitor for unexpected child process spawning from the application process (EDR alert).",
+            "Restrict outbound network connections from the affected service to limit attacker callback.",
+            "Enable application allow-listing to block execution of unauthorized binaries.",
+        ],
     },
     "CWE-79": {
         "name": "Cross-Site Scripting (XSS)",
         "plain": "An attacker can inject malicious scripts into web pages viewed by other users,"
         " potentially stealing sessions or data.",
         "fix": "Encode all output to the browser. Implement a Content Security Policy (CSP).",
+        "controls": [
+            "Enable Content Security Policy (CSP) headers to restrict what scripts can execute.",
+            "Deploy a WAF with XSS detection rules as an additional layer.",
+            "Monitor web server logs for script injection patterns in request parameters.",
+        ],
     },
     "CWE-89": {
         "name": "SQL Injection",
         "plain": "An attacker can manipulate database queries to read, change, or delete data.",
         "fix": "Use parameterized queries or prepared statements. Never build SQL from user input.",
+        "controls": [
+            "Enable database activity monitoring (DAM) to detect unusual query patterns.",
+            "Deploy a WAF with SQL injection signatures to block common attack payloads.",
+            "Restrict the database account used by the application to the minimum required permissions.",
+        ],
     },
     "CWE-94": {
         "name": "Code Injection",
         "plain": "An attacker can inject code that gets executed by the application.",
         "fix": "Never eval or execute user-supplied content as code.",
+        "controls": [
+            "Monitor for unexpected process execution originating from the application.",
+            "Apply application allow-listing to prevent execution of unauthorized code.",
+            "Restrict write access to directories the application can execute from.",
+        ],
     },
     "CWE-125": {
         "name": "Out-of-bounds Read",
         "plain": "The software reads memory outside what it allocated, potentially leaking sensitive data.",
         "fix": "Apply vendor patch. Bounds-check all buffer accesses.",
+        "controls": [
+            "Verify memory protection features are enabled on the host (ASLR, DEP/NX).",
+            "Monitor for repeated application crashes or core dumps which may indicate exploitation.",
+            "Consider running the affected service in an isolated process or sandbox.",
+        ],
     },
     "CWE-190": {
         "name": "Integer Overflow",
         "plain": "A math overflow causes unexpected behavior that attackers can exploit.",
         "fix": "Apply vendor patch. Validate numeric input ranges.",
+        "controls": [
+            "Verify memory protection features are enabled on the host (ASLR, DEP/NX).",
+            "Monitor for application crashes or unexpected behavior following numeric input.",
+        ],
     },
     "CWE-200": {
         "name": "Information Exposure",
         "plain": "Sensitive information is exposed to people who shouldn't have access to it.",
         "fix": "Review and restrict what information is returned in errors or responses.",
+        "controls": [
+            "Audit API and error responses immediately for sensitive data leakage.",
+            "Monitor access logs for unusual enumeration patterns or high-volume data requests.",
+            "Enable rate limiting on affected endpoints to slow data harvesting attempts.",
+        ],
     },
     "CWE-287": {
         "name": "Improper Authentication",
         "plain": "The system doesn't properly verify who someone is, allowing unauthorized access.",
         "fix": "Apply vendor patch. Enforce multi-factor authentication where possible.",
+        "controls": [
+            "Enable MFA on all accounts that can access the affected system.",
+            "Monitor authentication logs for unusual patterns, repeated failures, or off-hours access.",
+            "Implement account lockout policies to slow brute-force attempts.",
+        ],
     },
     "CWE-295": {
         "name": "Improper Certificate Validation",
         "plain": "The software doesn't verify SSL/TLS certificates properly, enabling man-in-the-middle attacks.",
         "fix": "Apply vendor patch. Ensure certificate validation is not disabled in configuration.",
+        "controls": [
+            "Audit configuration to confirm certificate validation is not explicitly disabled.",
+            "Monitor network traffic for unexpected or self-signed certificates on sensitive connections.",
+            "Restrict outbound TLS connections from the affected service to known-good endpoints.",
+        ],
     },
     "CWE-306": {
         "name": "Missing Authentication",
         "plain": "Critical functions can be accessed without any login or credentials.",
         "fix": "Apply vendor patch. Audit exposed endpoints for authentication requirements.",
+        "controls": [
+            "Restrict network access to the affected endpoint via firewall rules immediately.",
+            "Place the service behind an authenticated reverse proxy as a temporary control.",
+            "Monitor access logs for unauthorized requests to the unprotected endpoint.",
+        ],
     },
     "CWE-326": {
         "name": "Inadequate Encryption Strength",
         "plain": "The encryption used is weak enough that attackers can break it.",
         "fix": "Upgrade to AES-256 or equivalent. Disable weak cipher suites.",
+        "controls": [
+            "Disable weak cipher suites in server/service configuration immediately (RC4, DES, 3DES).",
+            "Scan TLS configuration with testssl.sh or sslyze to confirm weak ciphers are removed.",
+            "Monitor for negotiation of weak ciphers in network traffic logs.",
+        ],
     },
     "CWE-327": {
         "name": "Broken Cryptographic Algorithm",
         "plain": "The software uses outdated or broken cryptography that attackers can defeat.",
         "fix": "Replace deprecated algorithms (MD5, SHA-1, DES) with modern equivalents.",
+        "controls": [
+            "Audit configuration to identify and disable deprecated algorithm usage (MD5, SHA-1, DES).",
+            "Monitor network traffic for use of deprecated algorithms in TLS negotiation.",
+            "Scan with testssl.sh or sslyze to confirm deprecated algorithms are disabled.",
+        ],
     },
     "CWE-352": {
         "name": "Cross-Site Request Forgery (CSRF)",
         "plain": "An attacker can trick a logged-in user into unknowingly performing actions.",
         "fix": "Implement CSRF tokens. Use SameSite cookie attribute.",
+        "controls": [
+            "Verify SameSite cookie attributes are set to Strict or Lax on session cookies.",
+            "Monitor access logs for unexpected cross-origin requests to state-changing endpoints.",
+            "Enable referrer-based request validation as a temporary layer while patching.",
+        ],
     },
     "CWE-400": {
         "name": "Uncontrolled Resource Consumption",
         "plain": "An attacker can exhaust system memory or CPU, causing a denial of service.",
         "fix": "Apply vendor patch. Implement rate limiting and resource quotas.",
+        "controls": [
+            "Enable rate limiting and connection throttling on affected endpoints immediately.",
+            "Monitor CPU, memory, and connection metrics for spikes indicating an attack.",
+            "Configure auto-scaling or load shedding if the infrastructure supports it.",
+        ],
     },
     "CWE-416": {
         "name": "Use After Free",
         "plain": "The software uses memory after releasing it, which attackers can exploit to run code.",
         "fix": "Apply vendor patch. No user-side workaround available for this class.",
+        "controls": [
+            "Verify memory protection features are enabled on the host (ASLR, DEP/NX, stack canaries).",
+            "Monitor for application crashes or core dumps which may indicate exploitation attempts.",
+            "Consider running the affected service in an isolated process or container.",
+        ],
     },
     "CWE-434": {
         "name": "Unrestricted File Upload",
         "plain": "An attacker can upload malicious files (e.g., scripts) that the server may execute.",
         "fix": "Validate file types server-side. Store uploads outside the web root.",
+        "controls": [
+            "Confirm upload directories are outside the web root and have no execute permissions.",
+            "Monitor upload directories for newly created files with executable extensions.",
+            "Scan uploaded files with antivirus or content inspection before allowing access.",
+        ],
     },
     "CWE-476": {
         "name": "NULL Pointer Dereference",
         "plain": "The application crashes when it tries to use an uninitialized memory reference.",
         "fix": "Apply vendor patch.",
+        "controls": [
+            "Monitor for repeated application crashes or restarts which may indicate exploitation.",
+            "Enable process crash alerting and automatic restart to maintain availability.",
+        ],
     },
     "CWE-502": {
         "name": "Deserialization of Untrusted Data",
         "plain": "Malicious data can be used to execute code when the application processes (deserializes) it.",
         "fix": "Apply vendor patch. Do not deserialize data from untrusted sources.",
+        "controls": [
+            "Monitor for unexpected child process spawning from application servers (key IOC for this class).",
+            "Restrict outbound network connections from the affected service to limit attacker callback.",
+            "Enable logging of all deserialization operations to detect malformed payload attempts.",
+        ],
     },
     "CWE-611": {
         "name": "XML External Entity (XXE)",
         "plain": "XML processing can be exploited to read local files or make internal network requests.",
         "fix": "Disable external entity processing in your XML parser.",
+        "controls": [
+            "Audit XML parser configuration to confirm external entity processing is disabled.",
+            "Monitor for unexpected outbound HTTP or DNS requests from the application.",
+            "Deploy WAF rules targeting XXE attack patterns in XML request bodies.",
+        ],
     },
     "CWE-732": {
         "name": "Incorrect Permission Assignment",
         "plain": "Files or resources have overly permissive access controls.",
         "fix": "Audit and tighten file/resource permissions. Apply least privilege.",
+        "controls": [
+            "Audit file and resource permissions immediately and remove unnecessary access.",
+            "Enable file integrity monitoring (FIM) on sensitive paths to detect unauthorized changes.",
+            "Monitor access logs for unusual access patterns to sensitive files or directories.",
+        ],
     },
     "CWE-787": {
         "name": "Out-of-bounds Write",
         "plain": "The software writes data outside its allocated memory, potentially allowing code execution.",
         "fix": "Apply vendor patch.",
+        "controls": [
+            "Verify memory protection features are enabled on the host (ASLR, DEP/NX).",
+            "Monitor for application crashes which may indicate active exploitation attempts.",
+            "Consider running the affected service in an isolated process or container.",
+        ],
     },
     "CWE-798": {
         "name": "Hard-coded Credentials",
         "plain": "The application has embedded usernames or passwords that attackers can extract.",
         "fix": "Remove hard-coded credentials. Rotate any exposed secrets immediately.",
+        "controls": [
+            "Rotate the exposed credentials immediately — assume they are already compromised.",
+            "Monitor authentication logs for use of the exposed credentials from unexpected sources.",
+            "Audit access logs for any activity using the affected account since the vulnerability was introduced.",
+        ],
     },
     "CWE-918": {
         "name": "Server-Side Request Forgery (SSRF)",
         "plain": "An attacker can make the server send requests to internal systems or external services.",
         "fix": "Validate and allowlist URLs the server is permitted to contact.",
+        "controls": [
+            "Implement egress filtering to block outbound requests to internal IP ranges (RFC1918).",
+            "Monitor outbound network traffic from the application for unexpected internal requests.",
+            "Deploy WAF rules targeting SSRF patterns in request parameters.",
+        ],
     },
 }
 
@@ -316,6 +439,20 @@ def _triage_priority(cvss: CVSSDetails, is_kev: bool, epss_score: Optional[float
     )
 
 
+def _build_compensating_controls(cwe_id: Optional[str]) -> list[str]:
+    """Return general compensating controls for the given CWE, or empty list."""
+    if not cwe_id or cwe_id not in CWE_MAP:
+        return []
+    return CWE_MAP[cwe_id].get("controls", [])
+
+
+def _build_sigma_link(cve_id: str) -> Optional[str]:
+    """Return a SigmaHQ GitHub code-search URL for the CVE."""
+    if not cve_id or not cve_id.startswith("CVE-"):
+        return None
+    return f"https://github.com/SigmaHQ/sigma/search?q={cve_id}&type=code"
+
+
 def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) -> EnrichedCVE:
     """Combine all fetched data into a structured, plain-language EnrichedCVE."""
 
@@ -347,6 +484,8 @@ def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) ->
 
     remediation = _build_remediation(cwe_id, patches, references)
     priority, label, reason = _triage_priority(cvss, is_kev, epss_score, poc.has_poc)
+    compensating_controls = _build_compensating_controls(cwe_id)
+    sigma_link = _build_sigma_link(cve_id)
 
     return EnrichedCVE(
         id=cve_id,
@@ -365,5 +504,7 @@ def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) ->
         affected_products=affected,
         patch_versions=patches,
         remediation=remediation,
+        compensating_controls=compensating_controls,
+        sigma_link=sigma_link,
         references=references,
     )
