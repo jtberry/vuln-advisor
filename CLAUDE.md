@@ -1,23 +1,10 @@
-# VulnAdvisor — Claude Code Project Guide
+# VulnAdvisor — Contributor Guide
 
 ## Project Overview
 
 VulnAdvisor is an open-source CVE triage and remediation guidance tool built for vulnerability management teams. It fetches data from free public sources (NVD, CISA KEV, EPSS, PoC-in-GitHub) and returns plain-language triage decisions with no API keys or paywalls required.
 
-Build methodology: crawl / walk / run. Keep changes scoped to the current phase.
-
----
-
-## Teaching Mode
-
-This repo is being built as a learning project. When working in this codebase:
-
-- **Always explain the why before the how.** Before writing or changing code, explain what pattern or principle is being applied and why it is the right choice here.
-- **Name the concept.** If you use a pattern (e.g. separation of concerns, single responsibility, dependency injection), say what it is called so the user can look it up and learn more.
-- **Explain trade-offs.** When there are multiple valid approaches, briefly explain what was chosen and what was ruled out and why.
-- **Flag learning moments.** If the existing code has something worth noting — a good pattern, a potential improvement, or a common pitfall — point it out even if it is not the main task.
-- **Teach on errors.** When something fails (a hook, a test, a runtime error), explain what the error means and why it happened, not just how to fix it.
-- **KISS check.** If a proposed solution is getting complex, pause and ask whether there is a simpler approach before proceeding.
+See `docs/architecture.md` for a full explanation of the design and every module's role.
 
 ---
 
@@ -33,7 +20,6 @@ docs/                 Architecture and project structure reference
 ```
 
 Each module has a single responsibility. Do not reach across layers.
-See `docs/architecture.md` for a full explanation of every design decision.
 
 ---
 
@@ -51,17 +37,23 @@ See `docs/architecture.md` for a full explanation of every design decision.
 
 ---
 
-## Behavior Rules
+## Dev Setup
 
-- Explain WHY before HOW when proposing changes
-- Prefer small, focused changes over large refactors
-- Ask before making changes that touch more than one module
-- All commits run pre-commit hooks (black, isort, ruff, bandit, pip-audit) — code must pass before committing
-- The user writes their own commits unless they explicitly ask otherwise
+```bash
+git clone https://github.com/jtberry/vuln-advisor.git
+cd vuln-advisor
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+All commits run pre-commit hooks automatically (black, isort, ruff, bandit, pip-audit). Code must pass all hooks before a commit is accepted.
 
 ---
 
-## Safety
+## Safety Rules
 
 - Never hardcode secrets, tokens, or credentials
 - Never disable authentication or security checks
@@ -70,15 +62,6 @@ See `docs/architecture.md` for a full explanation of every design decision.
 
 ---
 
-## Current Phase: Crawl
+## Contributing
 
-The core CLI is complete. Planned crawl-phase additions:
-- Bulk CVE input from a file or comma-separated list
-- Prioritized summary output for large lists (P1s first, then P2s, etc.)
-
-Walk phase (not yet started):
-- Custom priority overrides per user
-- Caching layer for repeated lookups and bulk processing
-- Web UI
-
-Do not build walk-phase features until crawl is complete and stable.
+Please open an issue before starting work on a significant change. This keeps effort aligned and avoids duplicate work. See `docs/architecture.md` before making structural changes.
