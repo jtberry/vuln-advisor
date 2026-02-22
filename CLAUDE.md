@@ -12,14 +12,36 @@ See `docs/architecture.md` for a full explanation of the design and every module
 
 ```
 main.py               CLI entry point (argparse)
-core/fetcher.py       All external HTTP calls — one function per source
-core/enricher.py      Data processing, triage logic, CWE mapping
-core/formatter.py     Terminal output and JSON rendering
-core/models.py        Dataclasses only — no logic
+core/                 Engine — fetching, enrichment, triage, formatting
+  fetcher.py          All external HTTP calls — one function per source
+  enricher.py         Data processing, triage logic, CWE mapping
+  formatter.py        Terminal output and JSON rendering
+  models.py           Dataclasses only — no logic
+api/                  REST API layer — walk phase (FastAPI)
+  main.py             App entry point
+  routes/cve.py       CVE lookup endpoints
+cache/                SQLite cache layer — walk phase
+  store.py            TTL-based cache for enriched CVE data
+web/                  Web UI — walk phase (templates)
 docs/                 Architecture and project structure reference
 ```
 
-Each module has a single responsibility. Do not reach across layers.
+Each module has a single responsibility. `core/` knows nothing about `api/` or `web/`. Do not reach across layers.
+
+---
+
+## Branch Strategy
+
+```
+main        Always stable and tagged. Reflects the latest release.
+develop     Active integration branch. All feature PRs target develop.
+feature/*   Short-lived feature branches cut from develop.
+```
+
+- Cut feature branches from `develop`, not `main`
+- PRs merge into `develop` for integration
+- `develop` merges into `main` as a tagged release (v0.2.0, etc.)
+- `main` is never force-pushed
 
 ---
 

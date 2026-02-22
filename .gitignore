@@ -4,3 +4,8 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.claude/
+
+# Walk phase — local cache database
+cache/*.db
+*.db
