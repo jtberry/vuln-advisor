@@ -55,4 +55,6 @@ class EnrichedCVE:
     affected_products: list[str]
     patch_versions: list[str]
     remediation: list[RemediationStep]
+    compensating_controls: list[str]  # general controls if patching is not immediate
+    sigma_link: Optional[str]  # Sigma rule search URL for detection rules
     references: list[Reference]
