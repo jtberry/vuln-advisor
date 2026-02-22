@@ -142,6 +142,7 @@ CWE_MAP: dict[str, dict[str, str]] = {
 
 # ---------------------------------------------------------------------------
 # CVSS vector plain-language maps
+# Each dict maps the single-character CVSS vector code to a human-readable string.
 # ---------------------------------------------------------------------------
 
 _AV = {
@@ -246,6 +247,12 @@ def _extract_affected_and_patches(cve: dict):
     return affected[:10], patches[:5]
 
 
+def _poc_link(cve_id: str) -> str:
+    """Build the PoC-in-GitHub browse URL for this CVE."""
+    year = cve_id.split("-")[1] if "-" in cve_id else "unknown"
+    return f"https://github.com/nomi-sec/PoC-in-GitHub/tree/master/{year}/{cve_id}"
+
+
 def _build_remediation(
     cwe_id: Optional[str], patch_versions: list[str], references: list[Reference]
 ) -> list[RemediationStep]:
@@ -332,10 +339,11 @@ def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) ->
     epss_score = epss_data.get("score")
     epss_percentile = epss_data.get("percentile")
 
+    has_poc = poc_data.get("has_poc", False)
     poc = PoCInfo(
-        has_poc=poc_data.get("has_poc", False),
+        has_poc=has_poc,
         count=poc_data.get("count", 0),
-        sources=poc_data.get("sources", []),
+        link=_poc_link(cve_id) if has_poc else None,
     )
 
     affected, patches = _extract_affected_and_patches(cve_raw)

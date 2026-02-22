@@ -10,9 +10,9 @@ Usage:
 """
 
 import argparse
-import sys
-from core.fetcher import fetch_nvd, fetch_kev, fetch_epss, fetch_poc
+
 from core.enricher import enrich
+from core.fetcher import fetch_epss, fetch_kev, fetch_nvd, fetch_poc
 from core.formatter import print_terminal, to_json
 
 
@@ -30,7 +30,7 @@ def process(cve_id: str, kev_set, output_json: bool) -> bool:
         return False
 
     epss_data = fetch_epss(cve_id)
-    poc_data  = fetch_poc(cve_id)
+    poc_data = fetch_poc(cve_id)
     print("done.")
 
     enriched = enrich(cve_raw, kev_set, epss_data, poc_data)
@@ -53,7 +53,7 @@ Examples:
   python main.py CVE-2021-44228
   python main.py CVE-2021-44228 CVE-2023-44487 CVE-2024-1234
   python main.py CVE-2021-44228 --json
-        """
+        """,
     )
     parser.add_argument(
         "cves",

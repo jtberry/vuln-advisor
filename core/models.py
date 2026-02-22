@@ -21,7 +21,7 @@ class CVSSDetails:
 class PoCInfo:
     has_poc: bool = False
     count: int = 0
-    sources: list[str] = field(default_factory=list)
+    link: Optional[str] = None  # browse URL to PoC-in-GitHub for this CVE
 
 
 @dataclass
