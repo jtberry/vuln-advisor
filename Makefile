@@ -48,8 +48,9 @@ security: ## Run security checks (bandit + pip-audit)
 
 smoke: ## Verify all modules import cleanly
 	$(PYTHON) -c "from core.enricher import enrich; \
-	              from core.formatter import print_terminal; \
+	              from core.formatter import print_terminal, print_summary; \
 	              from core.fetcher import fetch_nvd; \
+	              from cache.store import CVECache; \
 	              print('  All imports OK')"
 
 check: lint security smoke ## Run all quality checks (lint + security + smoke)

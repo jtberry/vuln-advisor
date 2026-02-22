@@ -9,12 +9,14 @@ Usage:
   python main.py --file cves.txt
   python main.py --file cves.txt --full
   python main.py CVE-2021-44228 --json
+  python main.py CVE-2021-44228 --no-cache
 """
 
 import argparse
 from pathlib import Path
 from typing import Optional
 
+from cache.store import CVECache
 from core.enricher import enrich
 from core.fetcher import fetch_epss, fetch_kev, fetch_nvd, fetch_poc
 from core.formatter import print_summary, print_terminal, to_json
@@ -31,12 +33,22 @@ def _load_file(path: str) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
 
 
-def fetch_and_enrich(cve_id: str, kev_set: set[str]) -> Optional[EnrichedCVE]:
-    """Fetch and enrich a single CVE. Returns None on failure."""
+def fetch_and_enrich(cve_id: str, kev_set: set[str], cache: Optional[CVECache] = None) -> Optional[EnrichedCVE]:
+    """Fetch and enrich a single CVE. Returns None on failure.
+
+    Raw API responses (NVD, EPSS, PoC) are cached. KEV status is always
+    evaluated fresh since the full feed is loaded at startup anyway.
+    """
     cve_id = cve_id.upper().strip()
     if not cve_id.startswith("CVE-"):
         print(f"  [!] '{cve_id}' doesn't look like a valid CVE ID. Expected format: CVE-YYYY-NNNNN")
         return None
+
+    if cache:
+        cached = cache.get(cve_id)
+        if cached:
+            print(f"  {cve_id} (cached)")
+            return enrich(cached["cve_raw"], kev_set, cached["epss_data"], cached["poc_data"])
 
     print(f"  Fetching {cve_id}...", end=" ", flush=True)
 
@@ -48,6 +60,9 @@ def fetch_and_enrich(cve_id: str, kev_set: set[str]) -> Optional[EnrichedCVE]:
     epss_data = fetch_epss(cve_id)
     poc_data = fetch_poc(cve_id)
     print("done.")
+
+    if cache:
+        cache.set(cve_id, {"cve_raw": cve_raw, "epss_data": epss_data, "poc_data": poc_data})
 
     return enrich(cve_raw, kev_set, epss_data, poc_data)
 
@@ -87,6 +102,11 @@ Examples:
         action="store_true",
         help="Output structured JSON instead of terminal display",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Skip the local cache and force fresh API lookups",
+    )
     args = parser.parse_args()
 
     # Collect and deduplicate CVE IDs from args and/or file
@@ -106,9 +126,11 @@ Examples:
     kev_set = fetch_kev()
     print(f"{len(kev_set)} entries loaded.\n")
 
+    cache = None if args.no_cache else CVECache()
+
     results: list[EnrichedCVE] = []
     for cve_id in cve_ids:
-        enriched = fetch_and_enrich(cve_id, kev_set)
+        enriched = fetch_and_enrich(cve_id, kev_set, cache)
         if enriched:
             results.append(enriched)
 
