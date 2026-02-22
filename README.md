@@ -46,6 +46,9 @@ Provide a CVE ID and get back a complete triage brief in seconds:
 - **Exploit probability** giving the statistical likelihood of exploitation in the next 30 days (EPSS)
 - **Public PoC status** indicating whether working proof-of-concept exploits are publicly available
 - **Remediation steps** covering what to patch, what version to upgrade to, and any workarounds if patching isn't immediate
+- **Compensating controls** with CWE-specific actions to reduce risk while a patch is pending (WAF rules, monitoring, network restrictions, and more)
+- **Detection rule links** pointing directly to SigmaHQ community detection rules for the CVE so your SOC can monitor while patching is in progress
+- **Bulk triage** accepting a list of CVE IDs or a file from a scanner export, returning a prioritized summary table sorted P1 → P4 so the most urgent items are always at the top
 
 The output is designed to be useful to two audiences at once: technical enough for an analyst to act on, plain enough for a manager to understand.
 
@@ -119,8 +122,31 @@ python main.py CVE-2021-44228
 
 ### Look up multiple CVEs at once
 
+When more than one CVE is provided, VulnAdvisor returns a prioritized summary table (P1 first) instead of individual reports.
+
 ```bash
 python main.py CVE-2021-44228 CVE-2023-44487 CVE-2024-1234
+```
+
+### Bulk triage from a file
+
+Pass a text file with one CVE ID per line. Lines starting with `#` and blank lines are ignored.
+
+```bash
+python main.py --file cves.txt
+```
+
+```
+# cves.txt — scanner export
+CVE-2021-44228
+CVE-2023-44487
+CVE-2024-21762
+```
+
+### Show full reports after the summary
+
+```bash
+python main.py --file cves.txt --full
 ```
 
 ### Get structured JSON output
@@ -195,7 +221,7 @@ deactivate
 
 ## Roadmap
 
-- [ ] Bulk CVE processing from vulnerability scanner exports
+- [x] Bulk CVE processing from vulnerability scanner exports
 - [ ] Web UI for team use
 - [ ] Remediation tracking (open → in progress → resolved)
 - [ ] Jira / ServiceNow ticket creation
