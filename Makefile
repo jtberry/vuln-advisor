@@ -19,7 +19,7 @@ venv: ## Create virtual environment
 	python3 -m venv $(VENV)
 	@echo "  Activate with: source $(VENV)/bin/activate"
 
-install: ## Install CLI runtime dependencies
+
 	pip install -r requirements.txt
 
 install-dev: ## Install all deps and set up pre-commit hooks
@@ -31,7 +31,7 @@ install-api: ## Install API dependencies (walk phase)
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 
-.PHONY: lint format security check smoke
+.PHONY: lint format security check smoke test
 
 lint: ## Check formatting and linting without auto-fixing
 	black --check .
@@ -43,7 +43,7 @@ format: ## Auto-fix formatting (black + isort)
 	isort .
 
 security: ## Run security checks (bandit + pip-audit + semgrep)
-	bandit -r core/ cache/ api/ -q
+	bandit -r core/ cache/ api/ cmdb/ -q
 	pip-audit -r requirements.txt
 	semgrep scan --config "p/python" --config "p/fastapi" --error --quiet .
 
@@ -52,9 +52,14 @@ smoke: ## Verify all modules import cleanly
 	              from core.formatter import print_terminal, print_summary; \
 	              from core.fetcher import fetch_nvd; \
 	              from cache.store import CVECache; \
+	              from cmdb.store import CMDBStore; \
+	              from cmdb.ingest import parse_csv, parse_trivy_json; \
 	              print('  All imports OK')"
 
 check: lint security smoke ## Run all quality checks (lint + security + smoke)
+
+test: ## Run unit tests with coverage report
+	pytest tests/ --cov=core.enricher --cov-report=term-missing --cov-fail-under=80
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 

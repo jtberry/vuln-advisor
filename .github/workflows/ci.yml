@@ -102,3 +102,20 @@ jobs:
 
       - name: Verify package imports cleanly
         run: python -c "from core.fetcher import fetch_nvd, fetch_kev, fetch_epss, fetch_poc; from core.enricher import enrich; from core.formatter import print_terminal, to_json; print('All imports OK')"
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: pytest with coverage
+        run: pytest tests/ --cov=core.enricher --cov-report=term-missing --cov-fail-under=80

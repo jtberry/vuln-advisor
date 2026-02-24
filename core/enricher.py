@@ -314,6 +314,7 @@ def _parse_cvss_vector(vector: str, details: CVSSDetails) -> None:
         KeyError,
         IndexError,
         TypeError,
+        AttributeError,
     ):  # noqa: S110  # nosec B110 — malformed CVSS vectors produce empty fields
         pass
 
