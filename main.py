@@ -13,14 +13,15 @@ Usage:
 """
 
 import argparse
+import re
 from pathlib import Path
 from typing import Optional
 
 from cache.store import CVECache
-from core.enricher import enrich
-from core.fetcher import fetch_epss, fetch_kev, fetch_nvd, fetch_poc
+from core.fetcher import fetch_kev
 from core.formatter import print_summary, print_terminal, to_json
 from core.models import EnrichedCVE
+from core.pipeline import process_cve
 
 
 def _load_file(path: str) -> list[str]:
@@ -33,38 +34,35 @@ def _load_file(path: str) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
 
 
+_CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
+
+
 def fetch_and_enrich(cve_id: str, kev_set: set[str], cache: Optional[CVECache] = None) -> Optional[EnrichedCVE]:
     """Fetch and enrich a single CVE. Returns None on failure.
 
-    Raw API responses (NVD, EPSS, PoC) are cached. KEV status is always
-    evaluated fresh since the full feed is loaded at startup anyway.
+    Delegates all pipeline logic to core.pipeline.process_cve. This function
+    exists solely to add CLI progress output around the pure pipeline call.
     """
-    cve_id = cve_id.upper().strip()
-    if not cve_id.startswith("CVE-"):
+    cve_id = cve_id.strip().upper()
+
+    if cache is not None and cache.get(cve_id) is not None:
+        print(f"  {cve_id} (cached)")
+        return process_cve(cve_id, kev_set, cache)
+
+    if not _CVE_RE.match(cve_id):
         print(f"  [!] '{cve_id}' doesn't look like a valid CVE ID. Expected format: CVE-YYYY-NNNNN")
         return None
 
-    if cache:
-        cached = cache.get(cve_id)
-        if cached:
-            print(f"  {cve_id} (cached)")
-            return enrich(cached["cve_raw"], kev_set, cached["epss_data"], cached["poc_data"])
-
     print(f"  Fetching {cve_id}...", end=" ", flush=True)
 
-    cve_raw = fetch_nvd(cve_id)
-    if not cve_raw:
+    result = process_cve(cve_id, kev_set, cache)
+
+    if result is None:
         print(f"\n  [!] No NVD record found for {cve_id}. Check the ID and try again.")
         return None
 
-    epss_data = fetch_epss(cve_id)
-    poc_data = fetch_poc(cve_id)
     print("done.")
-
-    if cache:
-        cache.set(cve_id, {"cve_raw": cve_raw, "epss_data": epss_data, "poc_data": poc_data})
-
-    return enrich(cve_raw, kev_set, epss_data, poc_data)
+    return result
 
 
 def main() -> None:
