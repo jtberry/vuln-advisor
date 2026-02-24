@@ -5,3 +5,4 @@ isort>=5.13.0
 ruff>=0.8.0
 bandit>=1.7.0
 pip-audit>=2.7.0
+semgrep>=1.50.0

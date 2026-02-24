@@ -42,9 +42,10 @@ format: ## Auto-fix formatting (black + isort)
 	black .
 	isort .
 
-security: ## Run security checks (bandit + pip-audit)
+security: ## Run security checks (bandit + pip-audit + semgrep)
 	bandit -r core/ cache/ api/ -q
 	pip-audit -r requirements.txt
+	semgrep scan --config "p/python" --config "p/fastapi" --error --quiet .
 
 smoke: ## Verify all modules import cleanly
 	$(PYTHON) -c "from core.enricher import enrich; \
