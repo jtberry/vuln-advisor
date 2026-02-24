@@ -19,7 +19,7 @@ core/                 Engine — fetching, enrichment, triage, formatting
   models.py           Dataclasses only — no logic
 api/                  REST API layer — walk phase (FastAPI)
   main.py             App entry point
-  routes/cve.py       CVE lookup endpoints
+  routes/v1/cve.py    CVE lookup endpoints
 cache/                SQLite cache layer — walk phase
   store.py            TTL-based cache for enriched CVE data
 web/                  Web UI — walk phase (templates)
