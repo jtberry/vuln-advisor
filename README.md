@@ -72,6 +72,9 @@ python main.py CVE-2021-44228
 ## Roadmap
 
 - [x] Bulk CVE processing from vulnerability scanner exports
+- [x] REST API layer (FastAPI) wrapping the core engine
+- [x] Exposure-aware triage (`--exposure internet/internal/isolated`)
+- [x] Export formats (CSV, HTML, Markdown)
 - [ ] Web UI for team use
 - [ ] Remediation tracking (open -> in progress -> resolved)
 - [ ] Jira / ServiceNow ticket creation
@@ -88,7 +91,15 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
-All commits run formatting (black, isort), linting (ruff), and security checks (bandit, pip-audit) automatically.
+All commits run pre-commit hooks automatically: formatting (black, isort), linting (ruff), security scanning (bandit, pip-audit, semgrep).
+
+To run the unit test suite locally:
+
+```bash
+make test
+```
+
+CI enforces 80% line coverage on `core/enricher.py`. All 6 CI checks (lint, security, semgrep, secret scan, import smoke test, unit tests) must pass before merging.
 
 ---
 

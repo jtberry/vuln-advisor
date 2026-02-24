@@ -94,7 +94,12 @@ def get_cve_summary(
     results = []
     for cve_id in deduped:
         try:
-            enriched = process_cve(cve_id, request.app.state.kev_set, request.app.state.cache)
+            enriched = process_cve(
+                cve_id,
+                request.app.state.kev_set,
+                request.app.state.cache,
+                exposure=exposure.value,
+            )
         except ValueError:
             continue
         if enriched is not None:
@@ -140,7 +145,12 @@ def post_cve_bulk(
 
     for cve_id in body.ids:
         try:
-            enriched = process_cve(cve_id, request.app.state.kev_set, request.app.state.cache)
+            enriched = process_cve(
+                cve_id,
+                request.app.state.kev_set,
+                request.app.state.cache,
+                exposure=exposure.value,
+            )
         except ValueError:
             failed += 1
             continue
@@ -189,11 +199,9 @@ def get_cve(
 ) -> dict:
     """Fetch and enrich a single CVE by ID.
 
-    Returns the full EnrichedCVE payload as JSON. The exposure param is
-    accepted for API contract stability but does not yet modify triage
-    priority -- that adjustment is a planned walk-phase feature. Accepting
-    the param now means callers will not need to change their request shape
-    when it lands.
+    Returns the full EnrichedCVE payload as JSON. The exposure param adjusts
+    triage priority: internet escalates P2/P3 by one level; isolated demotes
+    non-KEV findings by one level.
 
     Path param:
         cve_id   -- e.g. CVE-2021-44228 (case-insensitive, normalized internally)
@@ -218,7 +226,12 @@ def get_cve(
     # regex above (defensive). Convert to 400 so the caller gets a clear
     # error rather than an unhandled 500.
     try:
-        result = process_cve(normalized, request.app.state.kev_set, request.app.state.cache)
+        result = process_cve(
+            normalized,
+            request.app.state.kev_set,
+            request.app.state.cache,
+            exposure=exposure.value,
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=400,

@@ -1,0 +1,139 @@
+{% extends "layout.html" %}
+{% block title %}CVE Research — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+{# ── Page header ─────────────────────────────────────────────────── #}
+<div class="mb-4">
+  <h5 class="fw-bold mb-0" style="color: #e6edf3">CVE Research</h5>
+  <div class="text-muted" style="font-size: 0.82rem">Single lookup and bulk triage</div>
+</div>
+
+<div class="row g-4">
+
+  {# ── Left column: single CVE lookup ────────────────────────────── #}
+  <div class="col-12 col-lg-5">
+    <div class="card h-100">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Single Lookup</span>
+      </div>
+      <div class="card-body">
+
+        <form hx-post="/cve/lookup"
+              hx-target="#lookup-result"
+              hx-swap="innerHTML"
+              hx-indicator="#lookup-spinner">
+
+          <div class="mb-3">
+            <label for="lookup-cve" class="form-label" style="font-size: 0.82rem; color: #8b949e">
+              CVE ID
+            </label>
+            <input type="text"
+                   id="lookup-cve"
+                   name="cve_id"
+                   class="form-control form-control-sm font-mono"
+                   style="background-color: #0d1117; border-color: #30363d; color: #c9d1d9;
+                          font-size: 0.88rem"
+                   placeholder="CVE-2021-44228"
+                   autocomplete="off"
+                   required>
+          </div>
+
+          <div class="mb-3">
+            <label for="lookup-exposure" class="form-label" style="font-size: 0.82rem; color: #8b949e">
+              Exposure context
+            </label>
+            <select id="lookup-exposure"
+                    name="exposure"
+                    class="form-select form-select-sm"
+                    style="background-color: #0d1117; border-color: #30363d; color: #c9d1d9;
+                           font-size: 0.82rem">
+              <option value="internal" selected>Internal (default)</option>
+              <option value="internet">Internet-facing (upgrades P2 → P1)</option>
+              <option value="isolated">Isolated / air-gapped (downgrades P1 → P2)</option>
+            </select>
+            <div class="form-text" style="font-size: 0.72rem; color: #484f58">
+              Exposure adjusts triage priority based on your attack surface.
+            </div>
+          </div>
+
+          <button type="submit"
+                  class="btn btn-sm"
+                  style="background-color: #1f6feb; border-color: #1f6feb; color: #fff;
+                         font-size: 0.82rem; padding: 4px 16px">
+            <span>Look up</span>
+            <span id="lookup-spinner"
+                  class="htmx-indicator spinner-border spinner-border-sm ms-1"
+                  style="width: 0.75rem; height: 0.75rem" role="status"></span>
+          </button>
+
+        </form>
+
+        {# HTMX swaps cve_card.html fragment here #}
+        <div id="lookup-result" class="mt-3"></div>
+
+      </div>
+    </div>
+  </div>
+
+  {# ── Right column: bulk triage ──────────────────────────────────── #}
+  <div class="col-12 col-lg-7">
+    <div class="card">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Bulk Triage</span>
+      </div>
+      <div class="card-body">
+
+        <form hx-post="/cve/bulk"
+              hx-target="#bulk-result"
+              hx-swap="innerHTML"
+              hx-indicator="#bulk-spinner">
+
+          <div class="mb-3">
+            <label for="bulk-ids" class="form-label" style="font-size: 0.82rem; color: #8b949e">
+              CVE IDs <span style="color: #484f58">(one per line, max 50)</span>
+            </label>
+            <textarea id="bulk-ids"
+                      name="cve_ids_raw"
+                      class="form-control font-mono"
+                      style="background-color: #0d1117; border-color: #30363d; color: #c9d1d9;
+                             font-size: 0.82rem; resize: vertical"
+                      rows="7"
+                      placeholder="CVE-2021-44228&#10;CVE-2022-22965&#10;CVE-2023-23397"
+                      required></textarea>
+          </div>
+
+          <div class="d-flex align-items-center gap-3">
+            <div class="flex-grow-1">
+              <select name="exposure"
+                      class="form-select form-select-sm"
+                      style="background-color: #0d1117; border-color: #30363d; color: #c9d1d9;
+                             font-size: 0.82rem">
+                <option value="internal" selected>Internal</option>
+                <option value="internet">Internet-facing</option>
+                <option value="isolated">Isolated</option>
+              </select>
+            </div>
+            <button type="submit"
+                    class="btn btn-sm"
+                    style="background-color: #1f6feb; border-color: #1f6feb; color: #fff;
+                           font-size: 0.82rem; padding: 4px 20px; white-space: nowrap">
+              <span>Triage all</span>
+              <span id="bulk-spinner"
+                    class="htmx-indicator spinner-border spinner-border-sm ms-1"
+                    style="width: 0.75rem; height: 0.75rem" role="status"></span>
+            </button>
+          </div>
+
+        </form>
+
+        {# HTMX swaps bulk_results.html fragment here #}
+        <div id="bulk-result" class="mt-3"></div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

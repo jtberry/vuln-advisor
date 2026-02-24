@@ -20,27 +20,47 @@ In VulnAdvisor this principle is applied at the module level.
 ## Module Map
 
 ```
-main.py
-  │
-  ├── core/fetcher.py      — gets data from the internet
-  ├── core/enricher.py     — processes and analyzes that data
-  ├── core/formatter.py    — decides how to display results
-  └── core/models.py       — defines what data looks like
+main.py               CLI entry point — argparse, orchestration
+core/
+  pipeline.py         Pure process_cve() + process_cves() — shared by CLI and API
+  fetcher.py          All HTTP calls — one function per source, returns None on failure
+  enricher.py         Pure logic — raw data in, EnrichedCVE out
+  formatter.py        Terminal + JSON + CSV/HTML/Markdown — no business logic
+  models.py           Dataclasses only — zero logic
+cache/
+  store.py            SQLite TTL cache — shared by CLI and API
+api/
+  main.py             FastAPI app — middleware, rate limiting, /health endpoint
+  routes/v1/cve.py    CVE endpoints — GET /cve/{id}, POST /cve/bulk, GET /cve/summary
+tests/
+  test_enricher.py    Unit tests for core/enricher — 80 tests, 100% line coverage
 ```
 
-Each module has a clearly defined job and does not do anyone else's job.
+Each module has a clearly defined job and does not do anyone else's job. `core/` knows nothing about `api/` or `tests/`. Dependencies only flow inward toward the core.
 
 ---
 
 ## main.py — The Orchestrator
 
-**What it does:** Parses command-line arguments, loads the CISA KEV feed once, then calls `process()` for each CVE ID.
+**What it does:** Parses command-line arguments, loads the CISA KEV feed once, then calls `core/pipeline.py` for each CVE ID.
 
 **Why it is thin:** `main.py` should be an entry point, not a logic engine. It wires the pieces together and delegates everything else. If you find business logic in `main.py`, that is a signal it belongs somewhere in `core/`.
 
 **Pattern used:** This is called an **orchestrator** — it coordinates other components without doing the work itself.
 
 **Key decision:** The CISA KEV feed is loaded once before the loop, not once per CVE. This is a simple form of caching. Loading 1,000 CVEs should not download the KEV feed 1,000 times.
+
+---
+
+## core/pipeline.py — The Shared Processing Core
+
+**What it does:** Provides `process_cve()` and `process_cves()` — pure functions that handle the fetch-cache-enrich sequence for one or many CVE IDs. Both the CLI and the API call these functions. Neither caller reimplements the logic.
+
+**Why it exists:** Before `pipeline.py`, the CLI's main loop contained the fetch-and-enrich orchestration inline. This meant the API would have had to duplicate that logic. Extracting it into a pure function that any caller can use is the **Don't Repeat Yourself (DRY)** principle in action.
+
+**Why it is pure:** No `print()` statements, no side effects. Callers decide what to do with results. This makes the function easy to test and easy to call from different contexts (terminal, HTTP handler, future scheduler).
+
+**Key decision:** CVE ID validation (regex `CVE-\d{4}-\d{4,}`) lives here, not in the callers. One validation rule, one place to update it.
 
 ---
 
@@ -109,7 +129,7 @@ P4 (next cycle)   everything else
 
 **Why it is separate from enricher:** The enricher should not know or care how results are displayed. Keeping formatting separate means you can add a new output format (CSV, HTML, Slack message) without touching any of the logic.
 
-**Key decision — JSON output:** The `to_json()` function uses `dataclasses.asdict()` to convert the `EnrichedCVE` to a plain dictionary and then serializes it. This means the `--json` flag gives you a machine-readable version of the exact same data the terminal shows. This is the foundation for a future web API — the web layer would call `enrich()` and return the same JSON.
+**Key decision — JSON output:** The `to_json()` function uses `dataclasses.asdict()` to convert the `EnrichedCVE` to a plain dictionary and then serializes it. This means the `--json` flag gives you a machine-readable version of the exact same data the terminal shows. The REST API uses the same serialization path — the web layer calls `enrich()` and returns the same JSON.
 
 **Pattern used:** This is called the **Presentation Layer** — it only knows how to display data, never how to produce it.
 
@@ -117,17 +137,17 @@ P4 (next cycle)   everything else
 
 ## The Open-Core Path
 
-The current architecture was designed with a future SaaS product in mind.
+The architecture was designed so that the same core engine powers both the CLI and the API without duplication.
 
 ```
-Today (open source CLI):
-  main.py → fetcher → enricher → formatter → terminal
+Open source CLI (crawl phase — complete):
+  main.py → pipeline → fetcher → enricher → formatter → terminal
 
-Future (web layer, same core):
-  HTTP request → fetcher → enricher → to_json() → API response
+REST API (walk phase — active):
+  HTTP request → pipeline → fetcher → enricher → to_json() → API response
 ```
 
-The `--json` flag exists specifically to make this transition easy. The core logic does not need to change at all when a web layer is added. The web layer just becomes another consumer of the enricher's output.
+Both paths call the same `process_cve()` from `core/pipeline.py` and the same `enrich()` from `core/enricher.py`. The API is not a separate reimplementation — it is another consumer of the same core engine.
 
 This design pattern is called **open-core** — the core logic is free and open source, and the value-added layer (web UI, team features, integrations) is where a commercial product can be built on top.
 
@@ -135,10 +155,22 @@ This design pattern is called **open-core** — the core logic is free and open 
 
 ## What Was Deliberately Left Out
 
-**No database.** The tool fetches fresh data on every run. This is appropriate for a single-user CLI tool. A database becomes relevant in the walk phase when caching and bulk processing are added.
-
-**No logging framework.** `print()` is used for all output. A logging framework (like Python's `logging` module) adds complexity that is not justified for a CLI tool. If this becomes a server-side application, that changes.
-
 **No AI/ML layer.** The triage logic is entirely rule-based. Rules are transparent, auditable, and free. An AI layer would require an API key, cost money, and produce results that are harder to explain. Rule-based is the right choice for an open-source security tool.
 
-**No config file.** There are no user-configurable settings yet. Adding configuration before it is needed is over-engineering. The walk phase will introduce this when custom priority overrides become a feature.
+**No config file.** There are no user-configurable settings yet. Adding configuration before it is needed is over-engineering. This will be introduced when custom priority overrides become a feature.
+
+**No ORM.** The SQLite cache in `cache/store.py` uses parameterized queries directly — no SQLAlchemy or similar. The schema is a single table. An ORM would add a dependency and abstraction layer with no payoff at this scale.
+
+---
+
+## Testing Strategy
+
+**What is tested:** `core/enricher.py` — the module with the most business logic and the clearest pure-function interface (no I/O, no side effects). 80 tests, 100% line coverage.
+
+**Why private functions are tested directly:** `_triage_priority()` is the most critical logic path in the codebase. Testing it through `enrich()` alone would make it hard to isolate boundary conditions. Python does not enforce private access, and testing internals directly is the right call when those internals are the core decision engine.
+
+**Why no mocking:** All tested functions are pure — they take plain Python dicts and return plain Python objects. No HTTP calls, no SQLite. Pure functions are the highest-ROI test targets because they need zero test infrastructure.
+
+**Coverage scope:** `--cov=core.enricher` only. A global 80% threshold would fail immediately since `fetcher.py`, `pipeline.py`, and the API layer are not yet covered. Scoping to enricher is honest about what is actually tested. Expand scope as each tier gets tests added.
+
+**Pattern used:** This is called **unit testing** — testing the smallest independent unit of logic in isolation. The counterpart is integration testing, which tests multiple components working together.

@@ -1,0 +1,137 @@
+{#
+  partials/bulk_results.html -- HTMX result fragment for bulk CVE triage.
+
+  Returned by POST /cve/bulk and swapped into the result container.
+
+  Required context variables:
+    results    -- list[EnrichedCVE], sorted P1 first
+    invalid    -- list[str] IDs that failed CVE format validation
+    exposure   -- str
+    requested  -- int (count of valid IDs submitted, pre-cap)
+#}
+
+{# ── Invalid ID warning ── #}
+{% if invalid %}
+<div class="alert mb-3"
+     style="background-color: #21262d; border: 1px solid #d29922; color: #d29922;
+            border-radius: 6px; padding: 0.6rem 1rem; font-size: 0.8rem">
+  <strong>Skipped {{ invalid | length }} invalid ID(s):</strong>
+  {{ invalid | join(", ") }}
+</div>
+{% endif %}
+
+{# ── No results ── #}
+{% if not results %}
+<div class="text-center py-4 text-muted" style="font-size: 0.85rem">
+  No CVEs were found in NVD for the IDs you submitted.
+</div>
+
+{% else %}
+
+{# ── Summary line ── #}
+<div class="d-flex justify-content-between align-items-center mb-2 px-1">
+  <span class="text-muted" style="font-size: 0.78rem">
+    {{ results | length }} of {{ requested }} CVE(s) enriched
+    {% if requested > 50 %} — first 50 processed{% endif %}
+  </span>
+  <div class="d-flex gap-2">
+    {% set p1_count = results | selectattr("triage_priority", "equalto", "P1") | list | length %}
+    {% set p2_count = results | selectattr("triage_priority", "equalto", "P2") | list | length %}
+    {% set p3_count = results | selectattr("triage_priority", "equalto", "P3") | list | length %}
+    {% set p4_count = results | selectattr("triage_priority", "equalto", "P4") | list | length %}
+    {% if p1_count %}<span class="badge badge-p1">{{ p1_count }} P1</span>{% endif %}
+    {% if p2_count %}<span class="badge badge-p2">{{ p2_count }} P2</span>{% endif %}
+    {% if p3_count %}<span class="badge badge-p3">{{ p3_count }} P3</span>{% endif %}
+    {% if p4_count %}<span class="badge badge-p4">{{ p4_count }} P4</span>{% endif %}
+  </div>
+</div>
+
+{# ── Results table ── #}
+<div class="card" style="border-color: #30363d">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem; min-width: 160px">CVE</th>
+          <th>Priority</th>
+          <th>CVSS</th>
+          <th>EPSS</th>
+          <th>KEV</th>
+          <th>PoC</th>
+          <th style="min-width: 200px">Triage Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in results %}
+        <tr style="cursor: pointer"
+            onclick="location.href='/cve/{{ e.id }}?exposure={{ exposure }}'">
+
+          <td style="padding-left: 1rem">
+            <a href="/cve/{{ e.id }}?exposure={{ exposure }}"
+               class="text-decoration-none font-mono fw-semibold"
+               style="font-size: 0.85rem; color: #58a6ff"
+               onclick="event.stopPropagation()">
+              {{ e.id }}
+            </a>
+          </td>
+
+          <td>
+            <span class="badge badge-{{ e.triage_priority | lower }}">
+              {{ e.triage_priority }}
+            </span>
+          </td>
+
+          <td>
+            {% if e.cvss.score is not none %}
+            <span class="font-mono
+              {% if e.cvss.score >= 9.0 %}text-p1
+              {% elif e.cvss.score >= 7.0 %}text-p2
+              {% else %}text-muted{% endif %}"
+              style="font-size: 0.85rem">
+              {{ "%.1f" | format(e.cvss.score) }}
+            </span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td style="font-size: 0.82rem">
+            {% if e.epss_score is not none %}
+            <span class="{% if e.epss_score >= 0.5 %}text-p2{% else %}text-muted{% endif %}">
+              {{ "%.1f" | format(e.epss_score * 100) }}%
+            </span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if e.is_kev %}
+            <span class="badge badge-p1" style="font-size: 0.7rem">KEV</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td>
+            {% if e.poc.has_poc %}
+            <span class="text-p2 fw-bold">{{ e.poc.count }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td style="font-size: 0.75rem; color: #8b949e; max-width: 220px">
+            <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"
+                  title="{{ e.triage_reason }}">
+              {{ e.triage_reason }}
+            </span>
+          </td>
+
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

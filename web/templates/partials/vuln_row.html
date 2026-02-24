@@ -1,0 +1,128 @@
+{#
+  partials/vuln_row.html -- A single <tr> for the vulnerability table.
+
+  Used in two contexts:
+    1. Included by asset_detail.html (initial page render)
+    2. Returned by the HTMX status update route (fragment swap)
+
+  Required context variables:
+    vuln          -- AssetVulnerability dataclass
+    enriched      -- EnrichedCVE or None
+    deadline_info -- dict with {text, css} from _deadline_info()
+    nvd_url       -- NVD detail URL string
+    asset_id      -- int
+    statuses      -- list of valid status strings
+#}
+<tr id="row-{{ vuln.cve_id }}">
+
+  {# CVE ID #}
+  <td style="padding-left: 1rem">
+    <a href="/cve/{{ vuln.cve_id }}"
+       class="text-decoration-none font-mono fw-semibold"
+       style="font-size: 0.85rem; color: #58a6ff">
+      {{ vuln.cve_id }}
+    </a>
+    <a href="{{ nvd_url }}"
+       target="_blank"
+       rel="noopener noreferrer"
+       class="text-muted text-decoration-none"
+       style="font-size: 0.68rem; margin-left: 4px"
+       title="View on NVD">
+      &nearr;
+    </a>
+    {% if vuln.scanner != 'manual' %}
+    <div class="text-muted" style="font-size: 0.68rem">via {{ vuln.scanner }}</div>
+    {% endif %}
+  </td>
+
+  {# Priority (effective + base if modifier was applied) #}
+  <td>
+    <span class="badge badge-{{ vuln.effective_priority | lower }}">
+      {{ vuln.effective_priority }}
+    </span>
+    {% if vuln.base_priority and vuln.base_priority != vuln.effective_priority %}
+    <span class="badge ms-1"
+          style="background-color: #21262d; color: #8b949e; font-size: 0.65rem"
+          title="Base priority before criticality modifier">
+      {{ vuln.base_priority }}
+    </span>
+    {% endif %}
+  </td>
+
+  {# CVSS score #}
+  <td>
+    {% if enriched and enriched.cvss.score is not none %}
+    <span class="font-mono
+      {% if enriched.cvss.score >= 9.0 %}text-p1
+      {% elif enriched.cvss.score >= 7.0 %}text-p2
+      {% else %}text-muted{% endif %}"
+      style="font-size: 0.85rem">
+      {{ "%.1f" | format(enriched.cvss.score) }}
+    </span>
+    {% else %}
+    <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+
+  {# Description (truncated, full text on hover) #}
+  <td style="max-width: 240px">
+    {% if enriched and enriched.description %}
+    <span title="{{ enriched.description }}"
+          style="font-size: 0.78rem; color: #8b949e; display: block;
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+      {{ enriched.description }}
+    </span>
+    {% else %}
+    <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+
+  {# KEV badge #}
+  <td>
+    {% if enriched and enriched.is_kev %}
+    <span class="badge badge-p1" style="font-size: 0.7rem">KEV</span>
+    {% else %}
+    <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+
+  {# Status dropdown with HTMX inline update #}
+  <td>
+    <form hx-post="/assets/{{ asset_id }}/vulnerabilities/{{ vuln.cve_id }}/status"
+          hx-target="closest tr"
+          hx-swap="outerHTML"
+          class="d-flex align-items-center gap-2">
+      <select name="status"
+              class="form-select form-select-sm"
+              style="width: auto; min-width: 130px; font-size: 0.78rem;
+                     background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if vuln.status == s %}selected{% endif %}>
+          {{ s | replace('_', ' ') | title }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit"
+              class="btn btn-sm"
+              style="font-size: 0.72rem; padding: 3px 10px;
+                     background-color: #21262d; border-color: #30363d; color: #8b949e">
+        <span>Save</span>
+        <span class="htmx-indicator spinner-border spinner-border-sm ms-1"
+              style="width: 0.7rem; height: 0.7rem" role="status"></span>
+      </button>
+    </form>
+  </td>
+
+  {# Owner #}
+  <td style="font-size: 0.78rem; color: #8b949e">
+    {{ vuln.owner or "—" }}
+  </td>
+
+  {# SLA deadline countdown #}
+  <td>
+    <span class="{{ deadline_info.css }}" style="font-size: 0.82rem">
+      {{ deadline_info.text }}
+    </span>
+  </td>
+
+</tr>

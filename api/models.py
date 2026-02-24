@@ -188,3 +188,165 @@ class HealthResponse(BaseModel):
 
     status: str = "ok"
     version: str
+
+
+# ---------------------------------------------------------------------------
+# CMDB -- enums
+# ---------------------------------------------------------------------------
+
+
+class CriticalityEnum(str, Enum):
+    critical = "critical"
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class EnvironmentEnum(str, Enum):
+    production = "production"
+    staging = "staging"
+    development = "development"
+
+
+class VulnStatusEnum(str, Enum):
+    pending = "pending"
+    in_progress = "in_progress"
+    verified = "verified"
+    closed = "closed"
+    deferred = "deferred"
+
+
+# ---------------------------------------------------------------------------
+# CMDB -- asset request/response models
+# ---------------------------------------------------------------------------
+
+
+class AssetCreate(BaseModel):
+    """Request body for POST /api/v1/assets."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    hostname: str = Field(min_length=1, max_length=255)
+    ip: Optional[str] = Field(default=None, max_length=45)
+    environment: EnvironmentEnum = EnvironmentEnum.production
+    exposure: ExposureEnum = ExposureEnum.internal
+    criticality: CriticalityEnum = CriticalityEnum.medium
+    owner: Optional[str] = Field(default=None, max_length=255)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AssetVulnRow(BaseModel):
+    """Single vulnerability record in an asset detail response."""
+
+    model_config = ConfigDict(frozen=True)
+
+    vuln_id: int
+    cve_id: str
+    status: str
+    base_priority: str
+    effective_priority: str
+    discovered_at: str
+    deadline: Optional[str]
+    owner: Optional[str]
+    scanner: str
+
+
+class AssetResponse(BaseModel):
+    """Full asset detail response including linked vulnerability records."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    hostname: str
+    ip: Optional[str]
+    environment: str
+    exposure: str
+    criticality: str
+    owner: Optional[str]
+    tags: list[str]
+    created_at: str
+    vuln_counts: dict[str, int]
+    vulnerabilities: list[AssetVulnRow] = Field(default_factory=list)
+
+
+class AssetSummaryRow(BaseModel):
+    """One row in the GET /assets list -- no vulnerability detail."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    hostname: str
+    environment: str
+    exposure: str
+    criticality: str
+    owner: Optional[str]
+    vuln_counts: dict[str, int]
+
+
+# ---------------------------------------------------------------------------
+# CMDB -- vulnerability assignment and status update
+# ---------------------------------------------------------------------------
+
+
+class AssetVulnAssign(BaseModel):
+    """Request body for POST /api/v1/assets/{asset_id}/vulnerabilities."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    ids: list[_CveId] = Field(
+        min_length=1,
+        max_length=50,
+        description="CVE IDs to link to this asset. Min 1, max 50 per request.",
+    )
+    scanner: str = Field(default="manual", max_length=30)
+    owner: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("ids", mode="before")
+    @classmethod
+    def normalize_ids(cls, values: list) -> list[str]:
+        """Uppercase and deduplicate CVE IDs before pattern validation."""
+        seen: set[str] = set()
+        result: list[str] = []
+        for v in values:
+            normalized = str(v).upper()
+            if normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+        return result
+
+
+class AssetVulnStatusUpdate(BaseModel):
+    """Request body for PATCH .../vulnerabilities/{cve_id}/status."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    status: VulnStatusEnum
+    owner: Optional[str] = Field(default=None, max_length=255)
+    evidence: Optional[str] = Field(default=None, max_length=1000)
+
+
+# ---------------------------------------------------------------------------
+# CMDB -- ingest and dashboard
+# ---------------------------------------------------------------------------
+
+
+class IngestResponse(BaseModel):
+    """Response for POST /api/v1/ingest."""
+
+    model_config = ConfigDict(frozen=True)
+
+    assets_created: int
+    vulns_assigned: int
+    vulns_skipped: int
+    errors: list[str] = Field(default_factory=list)
+
+
+class DashboardResponse(BaseModel):
+    """Response for GET /api/v1/dashboard."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_assets: int
+    total_open_vulns: int
+    priority_counts: dict[str, int]
+    top_assets_by_p1: list[dict]

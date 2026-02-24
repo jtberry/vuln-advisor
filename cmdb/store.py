@@ -1,0 +1,352 @@
+"""
+cmdb/store.py -- SQLAlchemy-backed persistence layer for the VulnAdvisor CMDB.
+
+Uses SQLAlchemy Core (not ORM) so the domain dataclasses in cmdb/models.py
+remain the authoritative domain representation. SQLAlchemy provides a
+database-agnostic abstraction: swapping SQLite for PostgreSQL is a connection
+string change, not a rewrite.
+
+Pattern: Repository + Data Mapper. CMDBStore is the repository (one clean
+interface per entity). The _row_to_* functions are the mappers (they translate
+raw DB rows into domain dataclasses). Route handlers never touch SQL directly.
+
+Security: all queries use bound parameters. No f-strings in SQL.
+
+Usage:
+    store = CMDBStore()                               # SQLite default
+    store = CMDBStore("postgresql://user:pw@host/db") # PostgreSQL
+    asset_id = store.create_asset(asset)
+    store.create_asset_vuln(vuln)
+    assets = store.list_assets()
+    store.update_vuln_status(vuln_id, "in_progress", owner="alice")
+    store.close()
+"""
+
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine
+from sqlalchemy.engine import Engine
+
+from cmdb.models import Asset, AssetVulnerability, RemediationRecord
+
+_DEFAULT_DB_URL = f"sqlite:///{Path(__file__).parent / 'vulnadvisor_cmdb.db'}"
+
+# SLA deadline in days per priority bucket. P4 has no deadline.
+_SLA_DAYS: dict[str, int] = {
+    "P1": 1,
+    "P2": 7,
+    "P3": 30,
+}
+
+# ---------------------------------------------------------------------------
+# Schema
+# ---------------------------------------------------------------------------
+
+metadata = MetaData()
+
+_assets = Table(
+    "assets",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("hostname", String(255), nullable=False),
+    Column("ip", String(45)),
+    Column("environment", String(50), nullable=False, server_default="production"),
+    Column("exposure", String(50), nullable=False, server_default="internal"),
+    Column("criticality", String(50), nullable=False, server_default="medium"),
+    Column("owner", String(255)),
+    Column("tags", Text),  # JSON array serialized as text
+    Column("created_at", String(32), nullable=False),
+)
+
+_asset_vulns = Table(
+    "asset_vulnerabilities",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("asset_id", Integer, nullable=False),
+    Column("cve_id", String(30), nullable=False),
+    Column("status", String(30), nullable=False, server_default="pending"),
+    Column("base_priority", String(5)),
+    Column("effective_priority", String(5)),
+    Column("discovered_at", String(32), nullable=False),
+    Column("deadline", String(32)),
+    Column("owner", String(255)),
+    Column("evidence", Text),
+    Column("scanner", String(30), nullable=False, server_default="manual"),
+    UniqueConstraint("asset_id", "cve_id", name="uq_asset_cve"),
+)
+
+_remediation = Table(
+    "remediation_records",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("asset_vuln_id", Integer, nullable=False),
+    Column("status", String(30), nullable=False),
+    Column("owner", String(255)),
+    Column("evidence", Text),
+    Column("updated_at", String(32), nullable=False),
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _deadline_for(priority: str) -> Optional[str]:
+    """Return ISO 8601 deadline based on the SLA for this priority. P4 returns None."""
+    days = _SLA_DAYS.get(priority)
+    if days is None:
+        return None
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+def apply_criticality_modifier(priority: str, criticality: str) -> str:
+    """Upgrade triage priority one level for critical assets.
+
+    This modifier lives in cmdb/ rather than core/enricher.py so the CVE
+    engine stays asset-agnostic. The enricher operates on a CVE in isolation;
+    asset context is the CMDB's concern (Single Responsibility Principle).
+
+    critical + P3 -> P2
+    critical + P4 -> P3
+    All other combinations: priority unchanged.
+    """
+    if criticality != "critical":
+        return priority
+    return {"P3": "P2", "P4": "P3"}.get(priority, priority)
+
+
+# ---------------------------------------------------------------------------
+# Repository
+# ---------------------------------------------------------------------------
+
+
+class CMDBStore:
+    def __init__(self, db_url: str = _DEFAULT_DB_URL) -> None:
+        connect_args: dict = {}
+        if db_url.startswith("sqlite"):
+            # SQLite requires check_same_thread=False when used from FastAPI's
+            # async context where the same connection may be accessed across
+            # threads managed by the ASGI server.
+            connect_args["check_same_thread"] = False
+        self.engine: Engine = create_engine(db_url, connect_args=connect_args)
+        metadata.create_all(self.engine)
+
+    # ------------------------------------------------------------------
+    # Assets
+    # ------------------------------------------------------------------
+
+    def create_asset(self, asset: Asset) -> int:
+        """Insert a new asset and return its assigned database ID."""
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                _assets.insert().values(
+                    hostname=asset.hostname,
+                    ip=asset.ip,
+                    environment=asset.environment,
+                    exposure=asset.exposure,
+                    criticality=asset.criticality,
+                    owner=asset.owner,
+                    tags=json.dumps(asset.tags),
+                    created_at=_now_iso(),
+                )
+            )
+            conn.commit()
+            return result.inserted_primary_key[0]
+
+    def get_asset(self, asset_id: int) -> Optional[Asset]:
+        """Fetch a single asset by ID. Returns None if not found."""
+        with self.engine.connect() as conn:
+            row = conn.execute(_assets.select().where(_assets.c.id == asset_id)).fetchone()
+        return _row_to_asset(row) if row is not None else None
+
+    def get_asset_by_hostname(self, hostname: str) -> Optional[Asset]:
+        """Look up an asset by exact hostname match. Returns None if not found."""
+        with self.engine.connect() as conn:
+            row = conn.execute(_assets.select().where(_assets.c.hostname == hostname)).fetchone()
+        return _row_to_asset(row) if row is not None else None
+
+    def list_assets(self) -> list[Asset]:
+        """Return all assets ordered by hostname."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(_assets.select().order_by(_assets.c.hostname)).fetchall()
+        return [_row_to_asset(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Asset vulnerabilities
+    # ------------------------------------------------------------------
+
+    def create_asset_vuln(self, vuln: AssetVulnerability) -> int:
+        """Link a CVE to an asset and return the record ID.
+
+        Sets discovered_at to now if not already provided.
+        Auto-computes the SLA deadline from effective_priority.
+        Raises sqlalchemy.exc.IntegrityError if the (asset_id, cve_id) pair
+        already exists -- caller should catch and treat as a skip.
+        """
+        discovered_at = vuln.discovered_at or _now_iso()
+        deadline = _deadline_for(vuln.effective_priority)
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                _asset_vulns.insert().values(
+                    asset_id=vuln.asset_id,
+                    cve_id=vuln.cve_id.upper(),
+                    status=vuln.status,
+                    base_priority=vuln.base_priority,
+                    effective_priority=vuln.effective_priority,
+                    discovered_at=discovered_at,
+                    deadline=deadline,
+                    owner=vuln.owner,
+                    evidence=vuln.evidence,
+                    scanner=vuln.scanner,
+                )
+            )
+            conn.commit()
+            return result.inserted_primary_key[0]
+
+    def get_asset_vulns(self, asset_id: int) -> list[AssetVulnerability]:
+        """Return all vulnerability records for an asset, P1s first."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                _asset_vulns.select()
+                .where(_asset_vulns.c.asset_id == asset_id)
+                .order_by(_asset_vulns.c.effective_priority, _asset_vulns.c.discovered_at)
+            ).fetchall()
+        return [_row_to_vuln(r) for r in rows]
+
+    def get_vuln_by_asset_and_cve(self, asset_id: int, cve_id: str) -> Optional[AssetVulnerability]:
+        """Look up a single vuln record by (asset_id, cve_id). Returns None if not found."""
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                _asset_vulns.select().where(
+                    (_asset_vulns.c.asset_id == asset_id) & (_asset_vulns.c.cve_id == cve_id.upper())
+                )
+            ).fetchone()
+        return _row_to_vuln(row) if row is not None else None
+
+    def update_vuln_status(
+        self,
+        vuln_id: int,
+        status: str,
+        owner: Optional[str] = None,
+        evidence: Optional[str] = None,
+    ) -> bool:
+        """Update status on an AssetVulnerability and write an audit record.
+
+        Returns True if a row was updated, False if vuln_id was not found.
+        The RemediationRecord is the audit entry -- it is always written when
+        a status change succeeds, building an immutable history.
+        """
+        now = _now_iso()
+        with self.engine.connect() as conn:
+            result = conn.execute(
+                _asset_vulns.update()
+                .where(_asset_vulns.c.id == vuln_id)
+                .values(status=status, owner=owner, evidence=evidence)
+            )
+            if result.rowcount == 0:
+                conn.commit()
+                return False
+            conn.execute(
+                _remediation.insert().values(
+                    asset_vuln_id=vuln_id,
+                    status=status,
+                    owner=owner,
+                    evidence=evidence,
+                    updated_at=now,
+                )
+            )
+            conn.commit()
+        return True
+
+    def get_priority_counts(self, asset_id: int) -> dict[str, int]:
+        """Return open P1/P2/P3/P4 counts for a single asset (closed/deferred excluded)."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                _asset_vulns.select().where(
+                    (_asset_vulns.c.asset_id == asset_id) & (_asset_vulns.c.status.not_in(["closed", "deferred"]))
+                )
+            ).fetchall()
+        counts: dict[str, int] = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+        for row in rows:
+            p = row.effective_priority
+            if p in counts:
+                counts[p] += 1
+        return counts
+
+    def get_all_priority_counts(self) -> dict[str, int]:
+        """Return open P1/P2/P3/P4 counts aggregated across all assets."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                _asset_vulns.select().where(_asset_vulns.c.status.not_in(["closed", "deferred"]))
+            ).fetchall()
+        counts: dict[str, int] = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+        for row in rows:
+            p = row.effective_priority
+            if p in counts:
+                counts[p] += 1
+        return counts
+
+    def get_remediation_history(self, vuln_id: int) -> list[RemediationRecord]:
+        """Return all audit records for an AssetVulnerability, oldest first."""
+        with self.engine.connect() as conn:
+            rows = conn.execute(
+                _remediation.select().where(_remediation.c.asset_vuln_id == vuln_id).order_by(_remediation.c.updated_at)
+            ).fetchall()
+        return [
+            RemediationRecord(
+                id=r.id,
+                asset_vuln_id=r.asset_vuln_id,
+                status=r.status,
+                owner=r.owner,
+                evidence=r.evidence,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    def close(self) -> None:
+        self.engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Row mappers (Data Mapper pattern -- DB row -> domain dataclass)
+# ---------------------------------------------------------------------------
+
+
+def _row_to_asset(row) -> Asset:
+    tags: list[str] = json.loads(row.tags) if row.tags else []
+    return Asset(
+        id=row.id,
+        hostname=row.hostname,
+        ip=row.ip,
+        environment=row.environment,
+        exposure=row.exposure,
+        criticality=row.criticality,
+        owner=row.owner,
+        tags=tags,
+        created_at=row.created_at,
+    )
+
+
+def _row_to_vuln(row) -> AssetVulnerability:
+    return AssetVulnerability(
+        id=row.id,
+        asset_id=row.asset_id,
+        cve_id=row.cve_id,
+        status=row.status,
+        base_priority=row.base_priority or "",
+        effective_priority=row.effective_priority or "",
+        discovered_at=row.discovered_at,
+        deadline=row.deadline,
+        owner=row.owner,
+        evidence=row.evidence,
+        scanner=row.scanner,
+    )

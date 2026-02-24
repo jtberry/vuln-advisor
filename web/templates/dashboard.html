@@ -1,0 +1,181 @@
+{% extends "layout.html" %}
+{% block title %}Dashboard — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+{# ── Page header ─────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <h5 class="fw-bold mb-0" style="color: #e6edf3">Risk Dashboard</h5>
+    <div class="text-muted" style="font-size: 0.82rem">Asset-aware vulnerability triage</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="/docs#/Assets/create_asset_api_v1_assets_post"
+       class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">
+      + Add Asset
+    </a>
+    <a href="/docs#/Assets/ingest_file_api_v1_ingest_post"
+       class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">
+      Import Scan
+    </a>
+  </div>
+</div>
+
+{# ── KPI cards ───────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-xl-3">
+    <div class="card kpi-card kpi-assets h-100">
+      <div class="card-body">
+        <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Assets</div>
+        <div class="kpi-number" style="color: #3fb950">{{ total_assets }}</div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">registered</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card kpi-card kpi-p1 h-100">
+      <div class="card-body">
+        <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">P1 — Critical</div>
+        <div class="kpi-number text-p1">{{ priority_counts.P1 }}</div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">patch within 24 h</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card kpi-card kpi-open h-100">
+      <div class="card-body">
+        <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Open Vulns</div>
+        <div class="kpi-number" style="color: #388bfd">{{ total_open }}</div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">
+          P2: {{ priority_counts.P2 }}&nbsp;&nbsp;
+          P3: {{ priority_counts.P3 }}&nbsp;&nbsp;
+          P4: {{ priority_counts.P4 }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl-3">
+    <div class="card kpi-card kpi-overdue h-100">
+      <div class="card-body">
+        <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Overdue SLAs</div>
+        <div class="kpi-number {% if overdue_count > 0 %}text-p1{% else %}text-muted{% endif %}">
+          {{ overdue_count }}
+        </div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">past deadline</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Asset risk table ────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Asset Risk</span>
+    <span class="text-muted" style="font-size: 0.75rem">sorted by P1 count</span>
+  </div>
+
+  <div class="card-body p-0">
+    {% if asset_rows %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem">Hostname</th>
+          <th>Criticality</th>
+          <th>Exposure</th>
+          <th class="text-center">P1</th>
+          <th class="text-center">P2</th>
+          <th class="text-center">P3</th>
+          <th class="text-center">P4</th>
+          <th>Nearest SLA</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in asset_rows %}
+        <tr style="cursor: pointer" onclick="location.href='/assets/{{ row.asset.id }}'">
+
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ row.asset.id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.9rem"
+               onclick="event.stopPropagation()">
+              {{ row.asset.hostname }}
+            </a>
+            {% if row.asset.owner %}
+            <div class="text-muted" style="font-size: 0.72rem">{{ row.asset.owner }}</div>
+            {% endif %}
+          </td>
+
+          <td>
+            <span class="badge badge-crit-{{ row.asset.criticality }}">
+              {{ row.asset.criticality.upper() }}
+            </span>
+          </td>
+
+          <td>
+            <span class="badge badge-exp-{{ row.asset.exposure }}">
+              {{ row.asset.exposure.upper() }}
+            </span>
+          </td>
+
+          <td class="text-center">
+            {% if row.counts.P1 > 0 %}
+            <span class="text-p1 fw-bold">{{ row.counts.P1 }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-center">
+            {% if row.counts.P2 > 0 %}
+            <span class="text-p2">{{ row.counts.P2 }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-center">
+            {% if row.counts.P3 > 0 %}
+            <span class="text-p3">{{ row.counts.P3 }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-center">
+            {% if row.counts.P4 > 0 %}
+            <span class="text-p4">{{ row.counts.P4 }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+
+          <td>
+            <span class="{{ row.nearest_deadline.css }}" style="font-size: 0.82rem">
+              {{ row.nearest_deadline.text }}
+            </span>
+          </td>
+
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% else %}
+    <div class="text-center py-5">
+      <div class="text-muted mb-2">No assets registered yet.</div>
+      <div style="font-size: 0.82rem; color: #484f58">
+        Use <code>POST /api/v1/assets</code> or <code>POST /api/v1/ingest</code> to add assets,
+        then assign CVEs via <code>POST /api/v1/assets/{id}/vulnerabilities</code>.
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,407 @@
+{% extends "layout.html" %}
+{% block title %}{{ cve_id }} — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+{# ── Back link ────────────────────────────────────────────────────── #}
+<div class="mb-3">
+  <a href="/cve" class="text-muted text-decoration-none" style="font-size: 0.82rem">
+    &larr; CVE Research
+  </a>
+</div>
+
+{% if not enriched %}
+{# ── Not found ────────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <div class="fw-semibold font-mono mb-1" style="color: #e6edf3; font-size: 1rem">{{ cve_id }}</div>
+    <div class="text-muted" style="font-size: 0.85rem">Not found in NVD.</div>
+    <a href="{{ nvd_url }}" target="_blank" rel="noopener noreferrer"
+       class="btn btn-sm mt-3"
+       style="font-size: 0.78rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+      Check NVD directly &nearr;
+    </a>
+  </div>
+</div>
+
+{% else %}
+
+{# ── Header card ──────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+      <div>
+        <h5 class="fw-bold font-mono mb-2" style="color: #e6edf3">{{ enriched.id }}</h5>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <span class="badge badge-{{ enriched.triage_priority | lower }}">
+            {{ enriched.triage_priority }} — {{ enriched.triage_label }}
+          </span>
+          {% if enriched.is_kev %}
+          <span class="badge badge-p1" style="font-size: 0.72rem">CISA KEV</span>
+          {% endif %}
+          {% if enriched.poc.has_poc %}
+          <span class="badge badge-p2" style="font-size: 0.72rem">PoC: {{ enriched.poc.count }}</span>
+          {% endif %}
+          <span class="badge" style="background-color: #21262d; color: #8b949e; font-size: 0.72rem">
+            exposure: {{ exposure }}
+          </span>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ nvd_url }}" target="_blank" rel="noopener noreferrer"
+           class="btn btn-sm"
+           style="font-size: 0.78rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          View on NVD &nearr;
+        </a>
+        {% if enriched.sigma_link %}
+        <a href="{{ enriched.sigma_link }}" target="_blank" rel="noopener noreferrer"
+           class="btn btn-sm"
+           style="font-size: 0.78rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          Sigma Rules &nearr;
+        </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="text-muted mb-3" style="font-size: 0.8rem; font-style: italic">
+      {{ enriched.triage_reason }}
+    </div>
+
+    {% if enriched.description %}
+    <div style="font-size: 0.85rem; color: #c9d1d9; line-height: 1.6">
+      {{ enriched.description }}
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ── Metric row ───────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted mb-1" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">CVSS Score</div>
+        {% if enriched.cvss.score is not none %}
+        <div class="fw-bold font-mono
+          {% if enriched.cvss.score >= 9.0 %}text-p1
+          {% elif enriched.cvss.score >= 7.0 %}text-p2
+          {% elif enriched.cvss.score >= 4.0 %}text-p3
+          {% else %}text-p4{% endif %}"
+          style="font-size: 1.8rem; line-height: 1.1">
+          {{ "%.1f" | format(enriched.cvss.score) }}
+        </div>
+        <div class="text-muted" style="font-size: 0.72rem">{{ enriched.cvss.severity }}</div>
+        {% else %}
+        <div class="text-muted" style="font-size: 1.8rem">—</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted mb-1" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">EPSS</div>
+        {% if enriched.epss_score is not none %}
+        <div class="fw-bold
+          {% if enriched.epss_score >= 0.5 %}text-p2{% else %}text-muted{% endif %}"
+          style="font-size: 1.8rem; line-height: 1.1">
+          {{ "%.1f" | format(enriched.epss_score * 100) }}%
+        </div>
+        <div class="text-muted" style="font-size: 0.72rem">exploit probability</div>
+        {% else %}
+        <div class="text-muted" style="font-size: 1.8rem">—</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted mb-1" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">Public PoC</div>
+        {% if enriched.poc.has_poc %}
+        <div class="fw-bold text-p2" style="font-size: 1.8rem; line-height: 1.1">
+          {{ enriched.poc.count }}
+        </div>
+        <div class="text-muted" style="font-size: 0.72rem">exploit(s) found</div>
+        {% else %}
+        <div class="text-muted" style="font-size: 1.8rem">—</div>
+        <div class="text-muted" style="font-size: 0.72rem">none found</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card h-100">
+      <div class="card-body text-center py-3">
+        <div class="text-muted mb-1" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">CMDB Assets</div>
+        <div class="fw-bold
+          {% if affected_assets %}text-p1{% else %}text-muted{% endif %}"
+          style="font-size: 1.8rem; line-height: 1.1">
+          {{ affected_assets | length }}
+        </div>
+        <div class="text-muted" style="font-size: 0.72rem">
+          {% if affected_assets %}affected{% else %}not tracked{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="row g-4">
+
+  {# ── Left column ─────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-6">
+
+    {# ── CVSS Breakdown ── #}
+    {% if enriched.cvss.vector %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">CVSS v3 Breakdown</span>
+        <span class="text-muted ms-2 font-mono" style="font-size: 0.72rem">{{ enriched.cvss.vector }}</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table mb-0" style="font-size: 0.8rem">
+          <tbody>
+            {% set metrics = [
+              ("Attack Vector",        "attack_vector",        enriched.cvss.attack_vector),
+              ("Attack Complexity",    "attack_complexity",    enriched.cvss.attack_complexity),
+              ("Privileges Required",  "privileges_required",  enriched.cvss.privileges_required),
+              ("User Interaction",     "user_interaction",     enriched.cvss.user_interaction),
+              ("Scope",                "scope",                enriched.cvss.scope),
+              ("Confidentiality",      "confidentiality",      enriched.cvss.confidentiality),
+              ("Integrity",            "integrity",            enriched.cvss.integrity),
+              ("Availability",         "availability",         enriched.cvss.availability),
+            ] %}
+            {% for label, metric, value in metrics %}
+            {% if value %}
+            <tr>
+              <td style="padding-left: 1rem; color: #8b949e; width: 50%">{{ label }}</td>
+              <td class="{{ cvss_row_css(metric, value) }} font-mono">{{ value }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── CWE ── #}
+    {% if enriched.cwe_id %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Weakness Classification</span>
+      </div>
+      <div class="card-body">
+        <div class="mb-1">
+          <span class="badge font-mono" style="background-color: #21262d; color: #58a6ff">
+            {{ enriched.cwe_id }}
+          </span>
+          <span class="ms-2" style="font-size: 0.85rem; color: #c9d1d9">{{ enriched.cwe_name }}</span>
+        </div>
+        {% if enriched.cwe_plain %}
+        <div style="font-size: 0.8rem; color: #8b949e; margin-top: 0.5rem; line-height: 1.5">
+          {{ enriched.cwe_plain }}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Affected products ── #}
+    {% if enriched.affected_products %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Affected Products</span>
+      </div>
+      <div class="card-body">
+        <ul class="mb-0 ps-3" style="font-size: 0.8rem; color: #8b949e">
+          {% for product in enriched.affected_products %}
+          <li class="font-mono">{{ product }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# ── Right column ────────────────────────────────────────────────── #}
+  <div class="col-12 col-lg-6">
+
+    {# ── Remediation steps ── #}
+    {% if enriched.remediation %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Remediation</span>
+      </div>
+      <div class="card-body">
+        {% for step in enriched.remediation %}
+        <div class="mb-3 {% if not loop.last %}pb-3{% endif %}"
+             {% if not loop.last %}style="border-bottom: 1px solid #21262d"{% endif %}>
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="badge font-mono"
+                  style="font-size: 0.65rem; background-color: #21262d; color: #8b949e">
+              {{ step.action }}
+            </span>
+            {% if step.priority == "RECOMMENDED" %}
+            <span class="badge" style="font-size: 0.62rem; background-color: #238636; color: #fff">
+              recommended
+            </span>
+            {% endif %}
+          </div>
+          <div style="font-size: 0.82rem; color: #c9d1d9; line-height: 1.5">
+            {{ step.description }}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Compensating controls ── #}
+    {% if enriched.compensating_controls %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Compensating Controls</span>
+      </div>
+      <div class="card-body">
+        <ul class="mb-0 ps-3" style="font-size: 0.8rem; color: #8b949e">
+          {% for ctrl in enriched.compensating_controls %}
+          <li style="margin-bottom: 0.35rem">{{ ctrl }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── PoC sources ── #}
+    {% if enriched.poc.has_poc and enriched.poc.sources %}
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">PoC Sources</span>
+      </div>
+      <div class="card-body">
+        <ul class="mb-0 ps-3" style="font-size: 0.78rem">
+          {% for src in enriched.poc.sources %}
+          <li>
+            <a href="{{ src }}" target="_blank" rel="noopener noreferrer"
+               style="color: #58a6ff; word-break: break-all">
+              {{ src }}
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ── Affected CMDB Assets ─────────────────────────────────────────── #}
+{% if affected_assets %}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Affected Assets in CMDB</span>
+    <span class="text-muted" style="font-size: 0.75rem">{{ affected_assets | length }} asset(s)</span>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem; min-width: 160px">Hostname</th>
+          <th>Criticality</th>
+          <th>Exposure</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Owner</th>
+          <th>SLA Deadline</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in affected_assets %}
+        <tr style="cursor: pointer" onclick="location.href='/assets/{{ row.asset.id }}'">
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ row.asset.id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.88rem"
+               onclick="event.stopPropagation()">
+              {{ row.asset.hostname }}
+            </a>
+          </td>
+          <td>
+            <span class="badge badge-crit-{{ row.asset.criticality }}">
+              {{ row.asset.criticality.upper() }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-exp-{{ row.asset.exposure }}">
+              {{ row.asset.exposure.upper() }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-{{ row.vuln.effective_priority | lower }}">
+              {{ row.vuln.effective_priority }}
+            </span>
+          </td>
+          <td>
+            <span class="status-{{ row.vuln.status }}" style="font-size: 0.8rem">
+              {{ row.vuln.status | replace('_', ' ') | title }}
+            </span>
+          </td>
+          <td style="font-size: 0.78rem; color: #8b949e">
+            {{ row.vuln.owner or "—" }}
+          </td>
+          <td>
+            <span class="{{ row.deadline_info.css }}" style="font-size: 0.82rem">
+              {{ row.deadline_info.text }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── References ───────────────────────────────────────────────────── #}
+{% if enriched.references %}
+<div class="card">
+  <div class="card-header py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">References</span>
+  </div>
+  <div class="card-body">
+    <ul class="mb-0 ps-3" style="font-size: 0.78rem">
+      {% for ref in enriched.references %}
+      <li class="mb-1">
+        <a href="{{ ref.url }}" target="_blank" rel="noopener noreferrer"
+           style="color: #58a6ff; word-break: break-all">
+          {% if ref.name %}{{ ref.name }}{% else %}{{ ref.url }}{% endif %}
+        </a>
+        {% if ref.tags %}
+        {% for tag in ref.tags %}
+        <span class="badge ms-1"
+              style="font-size: 0.58rem; background-color: #21262d; color: #8b949e">
+          {{ tag }}
+        </span>
+        {% endfor %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}{# end enriched #}
+
+{% endblock %}

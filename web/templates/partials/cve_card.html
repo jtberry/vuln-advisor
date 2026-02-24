@@ -1,0 +1,132 @@
+{#
+  partials/cve_card.html -- HTMX result fragment for a single CVE lookup.
+
+  Returned by POST /cve/lookup and swapped into the result container.
+
+  Required context variables:
+    enriched  -- EnrichedCVE or None
+    error     -- str or None
+    exposure  -- str (internet/internal/isolated)
+    nvd_url   -- str or None
+#}
+
+{% if error %}
+<div class="alert" role="alert"
+     style="background-color: #21262d; border: 1px solid #da3633; color: #f85149;
+            border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.85rem">
+  {{ error }}
+</div>
+
+{% else %}
+<div class="card" style="border-color: #30363d">
+  <div class="card-body p-3">
+
+    {# ── Header row: CVE ID + priority badge + KEV + NVD link ── #}
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span class="font-mono fw-bold" style="color: #e6edf3; font-size: 1rem">
+          {{ enriched.id }}
+        </span>
+        <span class="badge badge-{{ enriched.triage_priority | lower }}">
+          {{ enriched.triage_priority }} — {{ enriched.triage_label }}
+        </span>
+        {% if enriched.is_kev %}
+        <span class="badge badge-p1" style="font-size: 0.7rem">KEV</span>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2">
+        <a href="/cve/{{ enriched.id }}?exposure={{ exposure }}"
+           class="btn btn-sm"
+           style="font-size: 0.75rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          Full Detail &rarr;
+        </a>
+        <a href="{{ nvd_url }}" target="_blank" rel="noopener noreferrer"
+           class="btn btn-sm"
+           style="font-size: 0.75rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          NVD &nearr;
+        </a>
+      </div>
+    </div>
+
+    {# ── Triage reason ── #}
+    <div class="mb-3" style="font-size: 0.8rem; color: #8b949e; font-style: italic">
+      {{ enriched.triage_reason }}
+    </div>
+
+    {# ── Description ── #}
+    {% if enriched.description %}
+    <div class="mb-3" style="font-size: 0.82rem; color: #c9d1d9; line-height: 1.55">
+      {{ enriched.description }}
+    </div>
+    {% endif %}
+
+    {# ── Score row: CVSS | EPSS | PoC ── #}
+    <div class="d-flex gap-4 flex-wrap mb-3 pt-2" style="border-top: 1px solid #21262d">
+
+      <div>
+        <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">CVSS</div>
+        {% if enriched.cvss.score is not none %}
+        <div class="font-mono fw-bold
+          {% if enriched.cvss.score >= 9.0 %}text-p1
+          {% elif enriched.cvss.score >= 7.0 %}text-p2
+          {% elif enriched.cvss.score >= 4.0 %}text-p3
+          {% else %}text-p4{% endif %}"
+          style="font-size: 1.1rem">
+          {{ "%.1f" | format(enriched.cvss.score) }}
+        </div>
+        <div class="text-muted" style="font-size: 0.7rem">{{ enriched.cvss.severity }}</div>
+        {% else %}
+        <div class="text-muted">—</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">EPSS</div>
+        {% if enriched.epss_score is not none %}
+        <div class="fw-bold" style="font-size: 1.1rem; color: #c9d1d9">
+          {{ "%.1f" | format(enriched.epss_score * 100) }}%
+        </div>
+        <div class="text-muted" style="font-size: 0.7rem">exploit probability</div>
+        {% else %}
+        <div class="text-muted">—</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">PoC</div>
+        {% if enriched.poc.has_poc %}
+        <div class="fw-bold text-p2" style="font-size: 1.1rem">{{ enriched.poc.count }}</div>
+        <div class="text-muted" style="font-size: 0.7rem">public exploit(s)</div>
+        {% else %}
+        <div class="text-muted" style="font-size: 1.1rem">—</div>
+        <div class="text-muted" style="font-size: 0.7rem">none found</div>
+        {% endif %}
+      </div>
+
+      {% if enriched.cwe_id %}
+      <div>
+        <div class="text-muted" style="font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em">CWE</div>
+        <div style="font-size: 0.8rem; color: #c9d1d9">{{ enriched.cwe_id }}</div>
+        <div class="text-muted" style="font-size: 0.7rem; max-width: 200px">{{ enriched.cwe_name }}</div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    {# ── Compensating controls (collapsed) ── #}
+    {% if enriched.compensating_controls %}
+    <div style="border-top: 1px solid #21262d; padding-top: 0.6rem">
+      <div class="text-muted" style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.35rem">
+        Compensating Controls
+      </div>
+      <ul class="mb-0 ps-3" style="font-size: 0.78rem; color: #8b949e">
+        {% for ctrl in enriched.compensating_controls %}
+        <li>{{ ctrl }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endif %}

@@ -1,0 +1,111 @@
+{% extends "layout.html" %}
+{% block title %}{{ asset.hostname }} — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+{# ── Back + header ───────────────────────────────────────────────── #}
+<div class="mb-3">
+  <a href="/" class="text-muted text-decoration-none" style="font-size: 0.82rem">
+    &larr; Dashboard
+  </a>
+</div>
+
+{# ── Asset header card ───────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+
+      <div>
+        <h5 class="fw-bold font-mono mb-2" style="color: #e6edf3">{{ asset.hostname }}</h5>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <span class="badge badge-crit-{{ asset.criticality }}">{{ asset.criticality.upper() }}</span>
+          <span class="badge badge-exp-{{ asset.exposure }}">{{ asset.exposure.upper() }}</span>
+          <span class="badge" style="background-color: #21262d; color: #8b949e">
+            {{ asset.environment.upper() }}
+          </span>
+          {% if asset.ip %}
+          <span class="badge font-mono" style="background-color: #21262d; color: #8b949e">
+            {{ asset.ip }}
+          </span>
+          {% endif %}
+          {% for tag in asset.tags %}
+          <span class="badge" style="background-color: #21262d; color: #8b949e">{{ tag }}</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="text-muted" style="font-size: 0.8rem; text-align: right">
+        {% if asset.owner %}
+        <div>Owner: <span style="color: #c9d1d9">{{ asset.owner }}</span></div>
+        {% endif %}
+        <div>Registered: {{ asset.created_at[:10] }}</div>
+      </div>
+
+    </div>
+
+    {# ── Mini priority summary ───────────────────────────────── #}
+    <div class="d-flex gap-4 mt-3 pt-3" style="border-top: 1px solid #21262d">
+      {% for label, count, css in [
+          ('P1 — Critical', counts.P1, 'text-p1'),
+          ('P2 — High',     counts.P2, 'text-p2'),
+          ('P3 — Medium',   counts.P3, 'text-p3'),
+          ('P4 — Low',      counts.P4, 'text-p4'),
+      ] %}
+      <div>
+        <div class="fw-bold {% if count > 0 %}{{ css }}{% else %}text-muted{% endif %}">
+          {{ count }}
+        </div>
+        <div class="text-muted" style="font-size: 0.7rem">{{ label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+
+{# ── Vulnerability table ─────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Vulnerabilities</span>
+    <span class="text-muted" style="font-size: 0.75rem">{{ vuln_rows | length }} linked</span>
+  </div>
+
+  <div class="card-body p-0">
+    {% if vuln_rows %}
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem; min-width: 160px">CVE</th>
+          <th>Priority</th>
+          <th>CVSS</th>
+          <th style="min-width: 220px">Description</th>
+          <th>KEV</th>
+          <th style="min-width: 240px">Status</th>
+          <th>Owner</th>
+          <th>SLA Deadline</th>
+        </tr>
+      </thead>
+      <tbody id="vuln-table-body">
+        {% for row in vuln_rows %}
+        {% set vuln          = row.vuln %}
+        {% set enriched      = row.enriched %}
+        {% set deadline_info = row.deadline_info %}
+        {% set nvd_url       = row.nvd_url %}
+        {% include "partials/vuln_row.html" %}
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% else %}
+    <div class="text-center py-5">
+      <div class="text-muted mb-2">No vulnerabilities linked to this asset.</div>
+      <div style="font-size: 0.82rem; color: #484f58">
+        Use <code>POST /api/v1/assets/{{ asset.id }}/vulnerabilities</code> to assign CVE IDs.
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{% endblock %}

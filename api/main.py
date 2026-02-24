@@ -35,9 +35,13 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from api.limiter import limiter
 from api.models import ErrorDetail, ErrorResponse, HealthResponse
+from api.routes.v1.assets import router as assets_router
 from api.routes.v1.cve import router as cve_router
+from api.routes.v1.dashboard import router as dashboard_router
 from cache.store import CVECache
+from cmdb.store import CMDBStore
 from core.fetcher import fetch_kev
+from web.routes import router as web_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -100,6 +104,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("KEV feed unavailable — exploit status checks will be skipped")
     app.state.cache = CVECache()
     logger.info("Cache initialized")
+    app.state.cmdb = CMDBStore()
+    logger.info("CMDB initialized")
     app.state.purge_task = asyncio.create_task(_purge_loop(app))
 
     yield
@@ -107,6 +113,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Shutdown
     app.state.purge_task.cancel()
     app.state.cache.close()
+    app.state.cmdb.close()
     logger.info("VulnAdvisor API shutdown complete")
 
 
@@ -184,6 +191,10 @@ async def log_requests(request: Request, call_next):
 # ---------------------------------------------------------------------------
 
 app.include_router(cve_router, prefix="/api/v1", tags=["CVE Triage"])
+app.include_router(assets_router, prefix="/api/v1", tags=["Assets"])
+# Web router has no prefix -- serves / and /assets/{id}
+app.include_router(web_router, tags=["Web UI"])
+app.include_router(dashboard_router, prefix="/api/v1", tags=["Dashboard"])
 
 # ---------------------------------------------------------------------------
 # Exception handlers
@@ -232,7 +243,18 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Return a structured error for all FastAPI/Starlette HTTP exceptions."""
+    """Return a structured error for all FastAPI/Starlette HTTP exceptions.
+
+    Route handlers raise HTTPException with detail=ErrorDetail(...).model_dump()
+    (a dict). When detail is already a structured dict, use it directly as the
+    error field rather than stringifying it -- str(dict) produces a Python repr,
+    not JSON.
+    """
+    if isinstance(exc.detail, dict):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.detail},
+        )
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
