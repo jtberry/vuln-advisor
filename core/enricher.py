@@ -309,7 +309,12 @@ def _parse_cvss_vector(vector: str, details: CVSSDetails) -> None:
         details.confidentiality = _IMPACT.get(parts.get("C", ""), "")
         details.integrity = _IMPACT.get(parts.get("I", ""), "")
         details.availability = _IMPACT.get(parts.get("A", ""), "")
-    except Exception:  # noqa: S110  # nosec B110 — malformed CVSS vectors produce empty fields
+    except (
+        ValueError,
+        KeyError,
+        IndexError,
+        TypeError,
+    ):  # noqa: S110  # nosec B110 — malformed CVSS vectors produce empty fields
         pass
 
 
@@ -355,9 +360,21 @@ def _extract_affected_and_patches(cve: dict):
                     vendor = parts[3].replace("_", " ").title()
                     product = parts[4].replace("_", " ").title()
                     version = parts[5] if len(parts) > 5 and parts[5] != "*" else ""
-                    label = f"{vendor} {product}" + (f" {version}" if version else "")
-                    if label not in affected:
-                        affected.append(label)
+
+                    # Build a version-range label when range bounds are present.
+                    start_ver = match.get("versionStartIncluding") or match.get("versionStartExcluding")
+                    end_ver = match.get("versionEndIncluding") or match.get("versionEndExcluding")
+                    if start_ver and end_ver:
+                        range_label = f"{vendor} {product} {start_ver} through {end_ver}"
+                    elif end_ver:
+                        range_label = f"{vendor} {product} (up to {end_ver})"
+                    elif start_ver:
+                        range_label = f"{vendor} {product} (from {start_ver})"
+                    else:
+                        range_label = f"{vendor} {product}" + (f" {version}" if version else "")
+
+                    if range_label not in affected:
+                        affected.append(range_label)
 
                 fix_ver = match.get("versionEndExcluding") or match.get("versionEndIncluding")
                 if fix_ver:
@@ -366,7 +383,7 @@ def _extract_affected_and_patches(cve: dict):
                     if patch_label not in patches:
                         patches.append(patch_label)
 
-    return affected[:10], patches[:5]
+    return affected[:10], patches
 
 
 def _build_remediation(
@@ -379,6 +396,7 @@ def _build_remediation(
             RemediationStep(
                 action="PATCH",
                 description="Upgrade to the following fixed version(s): " + ", ".join(patch_versions),
+                priority="CRITICAL",
             )
         )
     else:
@@ -386,6 +404,7 @@ def _build_remediation(
             RemediationStep(
                 action="PATCH",
                 description="Apply the vendor-supplied patch. Check vendor advisories in the references below.",
+                priority="CRITICAL",
             )
         )
 
@@ -394,6 +413,7 @@ def _build_remediation(
             RemediationStep(
                 action="WORKAROUND",
                 description=CWE_MAP[cwe_id]["fix"],
+                priority="RECOMMENDED",
             )
         )
 
@@ -403,40 +423,55 @@ def _build_remediation(
             RemediationStep(
                 action="REFERENCE",
                 description="Vendor advisory: " + advisory_urls[0],
+                priority="OPTIONAL",
             )
         )
 
     return steps
 
 
-def _triage_priority(cvss: CVSSDetails, is_kev: bool, epss_score: Optional[float], has_poc: bool):
+def _triage_priority(
+    cvss: CVSSDetails,
+    is_kev: bool,
+    epss_score: Optional[float],
+    has_poc: bool,
+    exposure: str = "internal",
+) -> tuple:
     score = cvss.score or 0.0
 
     if score >= 9.0 and (is_kev or (epss_score or 0) >= 0.5):
-        return (
-            "P1",
-            "Fix within 24 hours",
-            "Critical CVSS score with active exploitation or high exploit probability.",
-        )
+        priority = "P1"
+        label = "Fix within 24 hours"
+        reason = "Critical CVSS score with active exploitation or high exploit probability."
+    elif score >= 7.0 and (is_kev or has_poc or (epss_score or 0) >= 0.3):
+        priority = "P2"
+        label = "Fix within 7 days"
+        reason = "High severity with public exploit or elevated exploitation probability."
+    elif score >= 7.0:
+        priority = "P2"
+        label = "Fix within 7 days"
+        reason = "High CVSS severity."
+    elif score >= 4.0:
+        priority = "P3"
+        label = "Fix within 30 days"
+        reason = "Medium severity - schedule for next patch cycle."
+    else:
+        priority = "P4"
+        label = "Fix at next scheduled patch cycle"
+        reason = "Low severity - address as part of routine patching."
 
-    if score >= 7.0 and (is_kev or has_poc or (epss_score or 0) >= 0.3):
-        return (
-            "P2",
-            "Fix within 7 days",
-            "High severity with public exploit or elevated exploitation probability.",
-        )
+    # Exposure adjustment: lower priority for assets with reduced attack surface.
+    # Never downgrade a KEV-confirmed exploit regardless of exposure.
+    if exposure == "isolated" and not is_kev:
+        _priority_map = {"P1": "P2", "P2": "P3", "P3": "P4", "P4": "P4"}
+        priority = _priority_map.get(priority, priority)
+    elif exposure == "internet" and priority in ("P2", "P3"):
+        # Internet-facing assets get one level higher urgency for exploitable vulns
+        if has_poc or (epss_score is not None and epss_score >= 0.2):
+            _upgrade_map = {"P2": "P1", "P3": "P2"}
+            priority = _upgrade_map.get(priority, priority)
 
-    if score >= 7.0:
-        return "P2", "Fix within 7 days", "High CVSS severity."
-
-    if score >= 4.0:
-        return "P3", "Fix within 30 days", "Medium severity — schedule for next patch cycle."
-
-    return (
-        "P4",
-        "Fix at next scheduled patch cycle",
-        "Low severity — address as part of routine patching.",
-    )
+    return priority, label, reason
 
 
 def _build_compensating_controls(cwe_id: Optional[str]) -> list[str]:
@@ -453,7 +488,9 @@ def _build_sigma_link(cve_id: str) -> Optional[str]:
     return f"https://github.com/SigmaHQ/sigma/search?q={cve_id}&type=code"
 
 
-def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) -> EnrichedCVE:
+def enrich(
+    cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict, exposure: str = "internal"
+) -> EnrichedCVE:
     """Combine all fetched data into a structured, plain-language EnrichedCVE."""
 
     cve_id = cve_raw.get("id", "Unknown")
@@ -483,7 +520,7 @@ def enrich(cve_raw: dict, kev_set: set[str], epss_data: dict, poc_data: dict) ->
     ]
 
     remediation = _build_remediation(cwe_id, patches, references)
-    priority, label, reason = _triage_priority(cvss, is_kev, epss_score, poc.has_poc)
+    priority, label, reason = _triage_priority(cvss, is_kev, epss_score, poc.has_poc, exposure)
     compensating_controls = _build_compensating_controls(cwe_id)
     sigma_link = _build_sigma_link(cve_id)
 

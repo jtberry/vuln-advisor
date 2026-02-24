@@ -14,9 +14,9 @@ function object before FastAPI wraps it.
 
 import re
 from dataclasses import asdict
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from api.limiter import limiter
 from api.models import (
@@ -44,7 +44,7 @@ router = APIRouter()
 @router.get("/cve/summary", response_model=SummaryCountResponse)
 def get_cve_summary(
     request: Request,
-    ids: str,
+    ids: Annotated[str, Query(max_length=2000)],
     exposure: ExposureEnum = ExposureEnum.internal,
 ) -> SummaryCountResponse:
     """Return priority bucket counts for a comma-separated list of CVE IDs.
@@ -75,7 +75,7 @@ def get_cve_summary(
                 detail=ErrorDetail(
                     code="invalid_cve_id",
                     message="Invalid CVE ID format.",
-                    detail=f"{cve_id} does not match CVE-YYYY-NNNNN.",
+                    detail=f"{cve_id[:50]} does not match CVE-YYYY-NNNNN.",
                 ).model_dump(),
             )
 
@@ -210,7 +210,7 @@ def get_cve(
             detail=ErrorDetail(
                 code="invalid_cve_id",
                 message="Invalid CVE ID format.",
-                detail=f"{cve_id} does not match CVE-YYYY-NNNNN.",
+                detail=f"{cve_id[:50]} does not match CVE-YYYY-NNNNN.",
             ).model_dump(),
         )
 
