@@ -147,8 +147,13 @@ app.include_router(cve_router, prefix="/api/v1", tags=["CVE Triage"])
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
-    """Return 429 with a structured error when a rate limit is exceeded."""
-    return JSONResponse(
+    """Return 429 with a structured error when a rate limit is exceeded.
+
+    Retry-After tells clients exactly how many seconds to wait before retrying.
+    slowapi stores this on the exception as exc.retry_after (int seconds).
+    """
+    retry_after = int(getattr(exc, "retry_after", 60))
+    response = JSONResponse(
         status_code=429,
         content=ErrorResponse(
             error=ErrorDetail(
@@ -158,6 +163,8 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONRe
             )
         ).model_dump(),
     )
+    response.headers["Retry-After"] = str(retry_after)
+    return response
 
 
 @app.exception_handler(RequestValidationError)
