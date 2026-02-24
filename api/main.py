@@ -20,7 +20,8 @@ shutdown (cancel purge task, close DB connection) symmetrically.
 from __future__ import annotations
 
 import asyncio
-import sys
+import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -37,6 +38,17 @@ from api.models import ErrorDetail, ErrorResponse, HealthResponse
 from api.routes.v1.cve import router as cve_router
 from cache.store import CVECache
 from core.fetcher import fetch_kev
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-5s %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("vulnadvisor.api")
 
 # ---------------------------------------------------------------------------
 # Background purge task
@@ -79,8 +91,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       3. Purge task last -- references app.state.cache, so cache must exist.
     """
     # Startup
-    app.state.kev_set = fetch_kev()
+    logger.info("VulnAdvisor API starting up")
+    kev_data = fetch_kev()
+    app.state.kev_set = kev_data
+    if kev_data:
+        logger.info("KEV feed loaded (%d entries)", len(kev_data))
+    else:
+        logger.warning("KEV feed unavailable — exploit status checks will be skipped")
     app.state.cache = CVECache()
+    logger.info("Cache initialized")
     app.state.purge_task = asyncio.create_task(_purge_loop(app))
 
     yield
@@ -88,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Shutdown
     app.state.purge_task.cancel()
     app.state.cache.close()
+    logger.info("VulnAdvisor API shutdown complete")
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +150,34 @@ app.add_middleware(SlowAPIMiddleware)
 # Attach the shared limiter to app.state so SlowAPIMiddleware can locate it.
 # SlowAPI looks for app.state.limiter by convention.
 app.state.limiter = limiter
+
+# ---------------------------------------------------------------------------
+# Request logging middleware
+#
+# Pattern: Interceptor / Chain of Responsibility. Every request passes through
+# this coroutine before reaching any route handler. We capture wall-clock time
+# before and after call_next so we can report latency on every response.
+#
+# @app.middleware("http") is separate from add_middleware() -- it wraps all
+# routes at the ASGI level and receives the raw Request/Response objects.
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "%s %s %d %.1fms %s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        ms,
+        request.client.host if request.client else "unknown",
+    )
+    return response
+
 
 # ---------------------------------------------------------------------------
 # Router registration
@@ -205,7 +253,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
     implementation details and aid attackers. The client receives only a
     generic message.
     """
-    print(str(exc), file=sys.stderr)
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content=ErrorResponse(

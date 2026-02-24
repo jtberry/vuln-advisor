@@ -3,10 +3,13 @@ fetcher.py — All external data fetching.
 All sources are free and require no API keys.
 """
 
+import logging
 import threading
 from typing import Any, Optional
 
 import requests
+
+logger = logging.getLogger("vulnadvisor.fetcher")
 
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -39,7 +42,7 @@ def fetch_nvd(cve_id: str, api_key: Optional[str] = None) -> Optional[dict[str, 
         vulns = resp.json().get("vulnerabilities", [])
         return vulns[0].get("cve") if vulns else None
     except requests.RequestException as e:
-        print(f"  [!] NVD fetch failed for {cve_id}: {e}")
+        logger.warning("NVD fetch failed for %s: %s", cve_id, e)
         return None
 
 
@@ -58,8 +61,8 @@ def fetch_kev() -> set[str]:
         resp.raise_for_status()
         entries = resp.json().get("vulnerabilities", [])
         kev_set: set[str] = {e["cveID"] for e in entries}
-    except requests.RequestException:
-        print("  [!] Could not fetch CISA KEV feed — skipping exploit status check.")
+    except requests.RequestException as e:
+        logger.warning("Could not fetch CISA KEV feed: %s", e)
         kev_set = set()
     with _kev_lock:
         _kev_cache = kev_set
@@ -77,8 +80,8 @@ def fetch_epss(cve_id: str) -> dict[str, Any]:
                 "score": float(data[0].get("epss", 0)),
                 "percentile": float(data[0].get("percentile", 0)),
             }
-    except requests.RequestException:
-        pass
+    except requests.RequestException as e:
+        logger.warning("EPSS fetch failed for %s: %s", cve_id, e)
     return {"score": None, "percentile": None}
 
 
