@@ -28,6 +28,7 @@ class PoCInfo:
 class RemediationStep:
     action: str  # PATCH | WORKAROUND | REFERENCE
     description: str
+    priority: str = "RECOMMENDED"
 
 
 @dataclass

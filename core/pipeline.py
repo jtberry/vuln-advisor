@@ -16,8 +16,22 @@ from core.models import EnrichedCVE
 _CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
 
 
-def process_cve(cve_id: str, kev_set: set[str], cache: Optional[CVECache] = None) -> Optional[EnrichedCVE]:
+def process_cve(
+    cve_id: str,
+    kev_set: set[str],
+    cache: Optional[CVECache] = None,
+    exposure: str = "internal",
+    nvd_api_key: Optional[str] = None,
+) -> Optional[EnrichedCVE]:
     """Fetch, cache, and enrich a single CVE. Returns None if the CVE is not found.
+
+    Args:
+        cve_id:      CVE identifier, e.g. "CVE-2021-44228".
+        kev_set:     Set of CVE IDs from the CISA KEV catalog.
+        cache:       Optional SQLite cache. Pass None to disable caching.
+        exposure:    Asset exposure context: "internet", "internal", or "isolated".
+                     Adjusts triage priority based on attack surface.
+        nvd_api_key: Optional NVD API key. Raises rate limit from 5 req/min to 50 req/min.
 
     Raises ValueError if cve_id does not match the expected format.
     No print statements — all side effects belong to the caller.
@@ -30,9 +44,10 @@ def process_cve(cve_id: str, kev_set: set[str], cache: Optional[CVECache] = None
     if cache is not None:
         cached = cache.get(cve_id)
         if cached is not None:
-            return enrich(cached["cve_raw"], kev_set, cached["epss_data"], cached["poc_data"])
+            # exposure is a runtime context, not cached — apply it fresh on each call
+            return enrich(cached["cve_raw"], kev_set, cached["epss_data"], cached["poc_data"], exposure)
 
-    cve_raw = fetch_nvd(cve_id)
+    cve_raw = fetch_nvd(cve_id, api_key=nvd_api_key)
     if cve_raw is None:
         return None
 
@@ -42,10 +57,16 @@ def process_cve(cve_id: str, kev_set: set[str], cache: Optional[CVECache] = None
     if cache is not None:
         cache.set(cve_id, {"cve_raw": cve_raw, "epss_data": epss_data, "poc_data": poc_data})
 
-    return enrich(cve_raw, kev_set, epss_data, poc_data)
+    return enrich(cve_raw, kev_set, epss_data, poc_data, exposure)
 
 
-def process_cves(cve_ids: list[str], kev_set: set[str], cache: Optional[CVECache] = None) -> list[EnrichedCVE]:
+def process_cves(
+    cve_ids: list[str],
+    kev_set: set[str],
+    cache: Optional[CVECache] = None,
+    exposure: str = "internal",
+    nvd_api_key: Optional[str] = None,
+) -> list[EnrichedCVE]:
     """Process a list of CVE IDs and return all successfully enriched results.
 
     Deduplicates input (case-insensitive, preserving first-occurrence order).
@@ -63,7 +84,7 @@ def process_cves(cve_ids: list[str], kev_set: set[str], cache: Optional[CVECache
     results: list[EnrichedCVE] = []
     for cve_id in deduped:
         try:
-            enriched = process_cve(cve_id, kev_set, cache)
+            enriched = process_cve(cve_id, kev_set, cache, exposure=exposure, nvd_api_key=nvd_api_key)
         except ValueError:
             continue
         if enriched is not None:
