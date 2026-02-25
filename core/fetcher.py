@@ -1,9 +1,18 @@
 """
 fetcher.py -- All external data fetching.
+<<<<<<< feature/issue-19-fetchkev-race
 All sources are free and require no API keys.
 """
 
 import logging
+=======
+All sources are free. NVD optionally accepts an API key for higher rate limits.
+"""
+
+import logging
+import os
+import threading
+>>>>>>> develop
 from typing import Any, Optional
 
 import requests
@@ -14,6 +23,11 @@ NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 EPSS_API = "https://api.first.org/data/v1/epss"
 POC_GITHUB = "https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/{year}/{cve_id}.json"
+
+# NVD_API_KEY is optional. When set, NVD allows 50 req/30s instead of 5 req/30s.
+# Read once at module load so the value is consistent for the process lifetime.
+# Get a free key at: https://nvd.nist.gov/developers/request-an-api-key
+_NVD_API_KEY: Optional[str] = os.environ.get("NVD_API_KEY") or None
 
 # Module-level session shared across all fetcher calls for connection pooling.
 # max_redirects=3 replaces the requests default of 30 -- these are known public APIs,
@@ -27,13 +41,21 @@ def fetch_nvd(cve_id: str, api_key: Optional[str] = None) -> Optional[dict[str, 
 
     Args:
         cve_id:  CVE identifier, e.g. "CVE-2021-44228".
-        api_key: Optional NVD API key (header: apiKey). Raises rate limit from
-                 5 req/min (unauthenticated) to 50 req/min (authenticated).
+        api_key: Optional NVD API key override. When not provided, the module
+                 reads NVD_API_KEY from the environment automatically. Passing
+                 a key raises the NVD rate limit from 5 req/30s (unauthenticated)
+                 to 50 req/30s (authenticated).
                  Free registration at https://nvd.nist.gov/developers/request-an-api-key
+
+    Gracefully falls back to unauthenticated calls if no key is available.
     """
+    # Explicit caller argument takes precedence; fall back to the module-level env var.
+    effective_key = api_key or _NVD_API_KEY
     try:
-        headers = {"apiKey": api_key} if api_key else {}
-        resp = _session.get(NVD_API, params={"cveId": cve_id}, headers=headers, timeout=10)
+        params: dict[str, str] = {"cveId": cve_id}
+        if effective_key:
+            params["apiKey"] = effective_key
+        resp = _session.get(NVD_API, params=params, timeout=10)
         resp.raise_for_status()
         vulns = resp.json().get("vulnerabilities", [])
         return vulns[0].get("cve") if vulns else None
