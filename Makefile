@@ -59,7 +59,7 @@ smoke: ## Verify all modules import cleanly
 check: lint security smoke ## Run all quality checks (lint + security + smoke)
 
 test: ## Run unit tests with coverage report
-	pytest tests/ --cov=core.enricher --cov-report=term-missing --cov-fail-under=80
+	pytest
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 

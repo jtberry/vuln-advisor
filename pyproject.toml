@@ -35,3 +35,7 @@ skips = ["B101"]  # skip assert warnings (same as ruff S101)
 
 [tool.bandit.assert_used]
 skips = ["*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=core.enricher --cov=core.pipeline --cov-report=term-missing --cov-fail-under=80"
