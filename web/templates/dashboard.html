@@ -176,6 +176,48 @@
     {% endif %}
 
   </div>
+
+  {% if total_pages > 1 %}
+  <div class="card-footer d-flex justify-content-between align-items-center py-2 px-3"
+       style="background-color: #161b22; border-top-color: #21262d">
+    <span class="text-muted" style="font-size: 0.78rem">
+      Showing {{ (page - 1) * page_size + 1 }}–{{ [(page * page_size), total_assets] | min }}
+      of {{ total_assets }} assets
+    </span>
+    <nav>
+      <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
+
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+          <a class="page-link"
+             href="/?page={{ page - 1 }}"
+             style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+            &laquo;
+          </a>
+        </li>
+
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+          <a class="page-link"
+             href="/?page={{ p }}"
+             style="{% if p == page %}background-color: #1f6feb; border-color: #1f6feb; color: #fff;{% else %}background-color: #21262d; border-color: #30363d; color: #8b949e;{% endif %} font-size: 0.78rem">
+            {{ p }}
+          </a>
+        </li>
+        {% endfor %}
+
+        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+          <a class="page-link"
+             href="/?page={{ page + 1 }}"
+             style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+            &raquo;
+          </a>
+        </li>
+
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+
 </div>
 
 {% endblock %}

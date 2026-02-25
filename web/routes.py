@@ -126,8 +126,11 @@ def _cvss_row_css(metric: str, value: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+_PAGE_SIZE = 25
+
+
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request) -> HTMLResponse:
+def dashboard(request: Request, page: int = 1) -> HTMLResponse:
     cmdb: CMDBStore = request.app.state.cmdb
     assets = cmdb.list_assets()
     priority_counts = cmdb.get_all_priority_counts()
@@ -159,15 +162,24 @@ def dashboard(request: Request) -> HTMLResponse:
 
     asset_rows.sort(key=lambda r: (-r["counts"]["P1"], -r["counts"]["P2"]))
 
+    total_assets = len(asset_rows)
+    total_pages = max(1, (total_assets + _PAGE_SIZE - 1) // _PAGE_SIZE)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * _PAGE_SIZE
+    page_rows = asset_rows[start : start + _PAGE_SIZE]
+
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
-            "asset_rows": asset_rows,
-            "total_assets": len(assets),
+            "asset_rows": page_rows,
+            "total_assets": total_assets,
             "priority_counts": priority_counts,
             "total_open": sum(priority_counts.values()),
             "overdue_count": overdue_count,
+            "page": page,
+            "total_pages": total_pages,
+            "page_size": _PAGE_SIZE,
         },
     )
 
