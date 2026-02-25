@@ -81,6 +81,42 @@ async def _purge_loop(app: FastAPI) -> None:
 
 
 # ---------------------------------------------------------------------------
+# KEV cache helper
+# ---------------------------------------------------------------------------
+
+_KEV_CACHE_KEY = "__KEV_SET__"
+
+
+def _load_kev(cache: CVECache) -> set[str]:
+    """Load the CISA KEV catalog, using CVECache as a TTL-backed store.
+
+    Pattern: Cache-Aside. Check the cache first; on miss, fetch from the
+    network and write back so subsequent process restarts within the TTL
+    window skip the HTTP call entirely.
+
+    This keeps fetch_kev() in core/ stateless (no globals, no locks) while
+    giving the API server the same effective caching behaviour. The KEV set
+    is stored under a sentinel key that can never collide with a real CVE ID.
+    CVECache.set() expects a dict, so we wrap the list in one.
+
+    Returns a set[str] of CVE IDs; always returns a valid set even on failure.
+    """
+    cached = cache.get(_KEV_CACHE_KEY)
+    if cached is not None:
+        ids = cached.get("ids", [])
+        logger.info("KEV feed loaded from cache (%d entries)", len(ids))
+        return set(ids)
+
+    kev_set = fetch_kev()
+    if kev_set:
+        cache.set(_KEV_CACHE_KEY, {"ids": list(kev_set)})
+        logger.info("KEV feed fetched and cached (%d entries)", len(kev_set))
+    else:
+        logger.warning("KEV feed unavailable -- exploit status checks will be skipped")
+    return kev_set
+
+
+# ---------------------------------------------------------------------------
 # Lifespan -- modern startup / shutdown pattern (replaces @app.on_event)
 # ---------------------------------------------------------------------------
 
@@ -94,23 +130,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     recommended replacement for the deprecated @app.on_event decorator and
     guarantees symmetric teardown even if startup raises an exception mid-way.
 
-    Startup order matters:
-      1. KEV feed first -- cheap synchronous HTTP call, data ready before any
-         request arrives.
-      2. Cache second -- depends on nothing, but must exist before the purge
-         task references app.state.cache.
-      3. Purge task last -- references app.state.cache, so cache must exist.
+    Startup order:
+      1. Cache first -- CVECache has no dependencies and is needed by _load_kev.
+      2. KEV feed via _load_kev() -- checks cache before making a network call.
+      3. CMDB, auth store, OAuth registry.
+      4. Purge task last -- references app.state.cache, so cache must exist.
     """
     # Startup
     logger.info("VulnAdvisor API starting up")
-    kev_data = fetch_kev()
-    app.state.kev_set = kev_data
-    if kev_data:
-        logger.info("KEV feed loaded (%d entries)", len(kev_data))
-    else:
-        logger.warning("KEV feed unavailable -- exploit status checks will be skipped")
     app.state.cache = CVECache()
     logger.info("Cache initialized")
+    app.state.kev_set = _load_kev(app.state.cache)
     app.state.cmdb = CMDBStore()
     logger.info("CMDB initialized")
     # Auth store and OAuth registry
