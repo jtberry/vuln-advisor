@@ -3,9 +3,12 @@ enricher.py — Takes raw fetched data and enriches it into a structured,
 plain-language EnrichedCVE ready for output.
 """
 
+import logging
 from typing import Optional
 
 from .models import CVSSDetails, EnrichedCVE, PoCInfo, Reference, RemediationStep
+
+_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # CWE — plain-language name, description, and generic remediation
@@ -315,8 +318,8 @@ def _parse_cvss_vector(vector: str, details: CVSSDetails) -> None:
         IndexError,
         TypeError,
         AttributeError,
-    ):  # noqa: S110  # nosec B110 — malformed CVSS vectors produce empty fields
-        pass
+    ) as e:
+        _log.warning("CVSS vector parse failed: vector=%r error=%s", vector, e)
 
 
 def _extract_cvss(cve: dict) -> CVSSDetails:

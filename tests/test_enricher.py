@@ -320,10 +320,21 @@ class TestParseCvssVector:
         assert details.attack_vector == ""
 
     def test_none_vector_does_not_raise(self):
-        # TypeError/AttributeError from None.split() is caught by the broad except clause
+        # TypeError from None.split() is caught and logged; fields remain empty
         details = CVSSDetails()
         _parse_cvss_vector(None, details)  # type: ignore[arg-type]
         assert details.attack_vector == ""
+
+    def test_malformed_vector_logs_warning(self, caplog):
+        """Malformed CVSS vector should log a WARNING, not raise."""
+        import logging
+
+        details = CVSSDetails()
+        with caplog.at_level(logging.WARNING, logger="core.enricher"):
+            _parse_cvss_vector(None, details)
+        assert len(caplog.records) == 1
+        assert caplog.records[0].levelno == logging.WARNING
+        assert "CVSS vector parse failed" in caplog.records[0].message
 
 
 # ---------------------------------------------------------------------------
