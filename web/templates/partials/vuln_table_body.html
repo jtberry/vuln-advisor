@@ -1,0 +1,18 @@
+{#
+  partials/vuln_table_body.html -- HTMX tbody replacement after adding CVEs.
+
+  Swapped into #vuln-table-body (innerHTML) on the asset detail page.
+  Contains only <tr> elements -- no surrounding <table> or <tbody> tags.
+
+  Required context variables:
+    vuln_rows  -- list of dicts: {vuln, enriched, deadline_info, nvd_url}
+    asset_id   -- int
+    statuses   -- list[str]
+#}
+{% for row in vuln_rows %}
+{% set vuln          = row.vuln %}
+{% set enriched      = row.enriched %}
+{% set deadline_info = row.deadline_info %}
+{% set nvd_url       = row.nvd_url %}
+{% include "partials/vuln_row.html" %}
+{% endfor %}

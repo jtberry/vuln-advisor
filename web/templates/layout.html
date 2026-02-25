@@ -89,6 +89,10 @@
       <a class="nav-link {% if request.url.path.startswith('/cve') %}text-light{% else %}text-secondary{% endif %}"
          href="/cve">CVE Research</a>
     </li>
+    <li class="nav-item">
+      <a class="nav-link {% if request.url.path == '/ingest' %}text-light{% else %}text-secondary{% endif %}"
+         href="/ingest">Ingest</a>
+    </li>
   </ul>
   <ul class="navbar-nav ms-auto">
     <li class="nav-item">

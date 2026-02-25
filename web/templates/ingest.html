@@ -1,0 +1,141 @@
+{% extends "layout.html" %}
+{% block title %}Import Scan — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+  <a href="/" class="text-muted text-decoration-none" style="font-size: 0.82rem">
+    &larr; Dashboard
+  </a>
+</div>
+
+<h5 class="fw-bold mb-4" style="color: #e6edf3">Import Scanner Output</h5>
+
+<div class="row g-4">
+
+  {# ── Upload form + result area ─────────────────────────────────── #}
+  <div class="col-lg-6">
+    <div class="card mb-3">
+      <div class="card-body p-4">
+        <form hx-post="/ingest"
+              hx-target="#ingest-result"
+              hx-swap="innerHTML"
+              hx-encoding="multipart/form-data"
+              hx-indicator="#ingest-spinner">
+
+          <div class="mb-3">
+            <label for="file" class="form-label text-muted" style="font-size: 0.82rem">
+              Scanner File <span class="text-danger">*</span>
+            </label>
+            <input type="file" id="file" name="file" required
+                   accept=".csv,.json"
+                   class="form-control form-control-sm"
+                   style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+            <div class="text-muted mt-1" style="font-size: 0.73rem">
+              Supported: generic CSV, Trivy JSON, Grype JSON, Nessus CSV. Max 1 MB.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="default_exposure" class="form-label text-muted" style="font-size: 0.82rem">
+              Default Exposure
+            </label>
+            <select id="default_exposure" name="default_exposure"
+                    class="form-select form-select-sm"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+              <option value="internet">Internet</option>
+              <option value="internal" selected>Internal</option>
+              <option value="isolated">Isolated</option>
+            </select>
+            <div class="text-muted mt-1" style="font-size: 0.73rem">
+              Applied to auto-created assets not yet in the CMDB.
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label for="default_criticality" class="form-label text-muted" style="font-size: 0.82rem">
+              Default Criticality
+            </label>
+            <select id="default_criticality" name="default_criticality"
+                    class="form-select form-select-sm"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+
+          <div class="d-flex align-items-center gap-3">
+            <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.82rem">
+              Import
+            </button>
+            <span id="ingest-spinner"
+                  class="htmx-indicator spinner-border spinner-border-sm text-secondary"
+                  style="width: 1rem; height: 1rem" role="status"></span>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+    {# HTMX result fragment is swapped in here #}
+    <div id="ingest-result"></div>
+  </div>
+
+  {# ── Format reference ─────────────────────────────────────────── #}
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header py-2 px-3">
+        <span class="text-muted" style="font-size: 0.82rem; font-weight: 600">Supported Formats</span>
+      </div>
+      <div class="card-body p-4" style="font-size: 0.82rem; color: #8b949e; line-height: 1.7">
+
+        <div class="mb-4">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">
+            Generic CSV <code style="font-size: 0.75rem">.csv</code>
+          </div>
+          <div>Header row required: <code>hostname,cve_id</code>. One row per CVE. Extra columns are ignored.</div>
+          <pre style="background-color: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+                      padding: 8px; font-size: 0.72rem; color: #79c0ff; margin-top: 6px">hostname,cve_id
+web-01,CVE-2021-44228
+db-01,CVE-2022-22965</pre>
+        </div>
+
+        <div class="mb-4">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">
+            Trivy JSON <code style="font-size: 0.75rem">.json</code>
+          </div>
+          <div>
+            Output from <code>trivy image --format json</code>.
+            Hostname taken from <code>ArtifactName</code>.
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">
+            Grype JSON <code style="font-size: 0.75rem">.json</code>
+          </div>
+          <div>
+            Output from <code>grype --output json</code>.
+            Hostname taken from <code>source.target.userInput</code>.
+          </div>
+        </div>
+
+        <div>
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">
+            Nessus CSV <code style="font-size: 0.75rem">.csv</code>
+          </div>
+          <div>
+            Essentials plugin export. Columns used: <code>Host</code> and <code>CVE</code>.
+            Rows with multiple CVE IDs are split automatically.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

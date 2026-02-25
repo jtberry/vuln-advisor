@@ -7,6 +7,8 @@ routes (same CMDB store, cache, KEV set) but return HTML instead of JSON.
 Route registration order matters. FastAPI resolves same-level paths in order:
   - GET /cve and POST /cve/lookup and POST /cve/bulk must be registered
     before GET /cve/{cve_id} or FastAPI captures "lookup"/"bulk" as path params.
+  - GET /assets/new and POST /assets must be registered before GET /assets/{asset_id}
+    or FastAPI captures "new" as a path parameter.
 
 Routes:
   GET  /                                              -- risk dashboard
@@ -14,8 +16,13 @@ Routes:
   POST /cve/lookup                                    -- HTMX: single CVE card
   POST /cve/bulk                                      -- HTMX: bulk results table
   GET  /cve/{cve_id}                                  -- full CVE detail
+  GET  /assets/new                                    -- asset creation form
+  POST /assets                                        -- handle creation, redirect to /assets/{id}
   GET  /assets/{asset_id}                             -- asset detail
+  POST /assets/{asset_id}/vulnerabilities             -- HTMX: add CVEs, return updated tbody
   POST /assets/{asset_id}/vulnerabilities/{cve}/status -- HTMX: row update
+  GET  /ingest                                        -- scanner file ingest form
+  POST /ingest                                        -- HTMX: file upload, return result fragment
 """
 
 import logging
@@ -24,12 +31,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError
 
 from api.models import CVE_PATTERN
-from cmdb.store import CMDBStore
+from cmdb.ingest import parse_csv, parse_grype_json, parse_nessus_csv, parse_trivy_json
+from cmdb.models import Asset, AssetVulnerability
+from cmdb.store import CMDBStore, apply_criticality_modifier
 from core.pipeline import process_cve, process_cves
 
 logger = logging.getLogger("vulnadvisor.web")
@@ -39,6 +49,11 @@ router = APIRouter()
 
 _NVD_URL = "https://nvd.nist.gov/vuln/detail/{cve_id}"
 _STATUSES = ["pending", "in_progress", "verified", "closed", "deferred"]
+_MAX_UPLOAD_BYTES = 1 * 1024 * 1024  # 1 MB
+_VALID_ENVIRONMENTS = {"production", "staging", "development"}
+_VALID_EXPOSURES = {"internet", "internal", "isolated"}
+_VALID_CRITICALITIES = {"critical", "high", "medium", "low"}
+_VALID_SCANNERS = {"manual", "csv", "trivy", "grype", "nessus"}
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +312,94 @@ def cve_detail(
 
 
 # ---------------------------------------------------------------------------
+# GET /assets/new -- asset creation form (MUST precede /assets/{asset_id})
+# ---------------------------------------------------------------------------
+
+
+@router.get("/assets/new", response_class=HTMLResponse)
+def asset_create_form(request: Request) -> HTMLResponse:
+    """Render the asset registration form."""
+    return templates.TemplateResponse(
+        "assets_form.html",
+        {"request": request, "error": None, "form_data": {}},
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /assets -- handle creation, 303-redirect to /assets/{id} on success
+# ---------------------------------------------------------------------------
+
+
+@router.post("/assets", response_class=HTMLResponse)
+async def asset_create(
+    request: Request,
+    hostname: Optional[str] = Form(default=None),
+    ip: Optional[str] = Form(default=None),
+    environment: str = Form(default="production"),
+    exposure: str = Form(default="internal"),
+    criticality: str = Form(default="medium"),
+    owner: Optional[str] = Form(default=None),
+    tags: Optional[str] = Form(default=None),
+) -> HTMLResponse:
+    """Handle asset creation form POST. Redirects to the new asset on success."""
+    form_data = {
+        "hostname": hostname or "",
+        "ip": ip or "",
+        "environment": environment,
+        "exposure": exposure,
+        "criticality": criticality,
+        "owner": owner or "",
+        "tags": tags or "",
+    }
+
+    hostname_clean = (hostname or "").strip()
+    if not hostname_clean:
+        return templates.TemplateResponse(
+            "assets_form.html",
+            {"request": request, "error": "Hostname is required.", "form_data": form_data},
+        )
+    if len(hostname_clean) > 255:
+        return templates.TemplateResponse(
+            "assets_form.html",
+            {"request": request, "error": "Hostname must be 255 characters or fewer.", "form_data": form_data},
+        )
+
+    if environment not in _VALID_ENVIRONMENTS:
+        environment = "production"
+    if exposure not in _VALID_EXPOSURES:
+        exposure = "internal"
+    if criticality not in _VALID_CRITICALITIES:
+        criticality = "medium"
+
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    asset = Asset(
+        hostname=hostname_clean,
+        ip=(ip or "").strip() or None,
+        environment=environment,
+        exposure=exposure,
+        criticality=criticality,
+        owner=(owner or "").strip() or None,
+        tags=tag_list,
+    )
+
+    cmdb: CMDBStore = request.app.state.cmdb
+    try:
+        asset_id = cmdb.create_asset(asset)
+    except Exception as exc:
+        logger.debug("Asset creation failed: %s", exc, exc_info=True)
+        return templates.TemplateResponse(
+            "assets_form.html",
+            {
+                "request": request,
+                "error": "Failed to create asset. The hostname may already be registered.",
+                "form_data": form_data,
+            },
+        )
+
+    return RedirectResponse(f"/assets/{asset_id}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # GET /assets/{asset_id} -- asset detail
 # ---------------------------------------------------------------------------
 
@@ -335,6 +438,93 @@ def asset_detail(request: Request, asset_id: int) -> HTMLResponse:
             "asset": asset,
             "vuln_rows": vuln_rows,
             "counts": cmdb.get_priority_counts(asset_id),
+            "asset_id": asset_id,
+            "statuses": _STATUSES,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /assets/{asset_id}/vulnerabilities -- HTMX: add CVEs, return updated tbody
+# ---------------------------------------------------------------------------
+
+
+@router.post("/assets/{asset_id}/vulnerabilities", response_class=HTMLResponse)
+async def add_asset_vulns_htmx(
+    request: Request,
+    asset_id: int,
+    cve_ids_raw: str = Form(...),
+    scanner: str = Form(default="manual"),
+    owner: Optional[str] = Form(default=None),
+) -> HTMLResponse:
+    """HTMX: enrich and assign CVEs to an asset, return all current tbody rows."""
+    cmdb: CMDBStore = request.app.state.cmdb
+    asset = cmdb.get_asset(asset_id)
+    if asset is None:
+        return HTMLResponse(
+            "<tr><td colspan='8' class='text-danger p-3'>Asset not found.</td></tr>",
+            status_code=404,
+        )
+
+    lines = [ln.strip().upper() for ln in cve_ids_raw.splitlines() if ln.strip()]
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    valid_ids: list[str] = []
+    for ln in lines:
+        if re.match(CVE_PATTERN, ln) and ln not in seen:
+            seen.add(ln)
+            valid_ids.append(ln)
+
+    if valid_ids:
+        enriched_list = process_cves(
+            valid_ids,
+            request.app.state.kev_set,
+            request.app.state.cache,
+            exposure=asset.exposure,
+        )
+        scanner_clean = scanner if scanner in _VALID_SCANNERS else "manual"
+        owner_clean = (owner or "").strip() or None
+        for enriched in enriched_list:
+            base_priority = enriched.triage_priority
+            effective_priority = apply_criticality_modifier(base_priority, asset.criticality)
+            vuln = AssetVulnerability(
+                asset_id=asset_id,
+                cve_id=enriched.id,
+                base_priority=base_priority,
+                effective_priority=effective_priority,
+                scanner=scanner_clean,
+                owner=owner_clean,
+            )
+            try:
+                cmdb.create_asset_vuln(vuln)
+            except IntegrityError:
+                pass  # Already assigned -- skip silently
+
+    # Re-fetch all vulns to return fresh, fully accurate tbody
+    vulns = cmdb.get_asset_vulns(asset_id)
+    vuln_rows = []
+    for vuln in vulns:
+        enriched = None
+        try:
+            enriched = process_cve(
+                vuln.cve_id, request.app.state.kev_set, request.app.state.cache, exposure=asset.exposure
+            )
+        except Exception:
+            logger.debug("Enrichment failed for %s on asset %d", vuln.cve_id, asset_id, exc_info=True)
+        vuln_rows.append(
+            {
+                "vuln": vuln,
+                "enriched": enriched,
+                "deadline_info": _deadline_info(vuln.deadline),
+                "nvd_url": _NVD_URL.format(cve_id=vuln.cve_id),
+            }
+        )
+
+    return templates.TemplateResponse(
+        "partials/vuln_table_body.html",
+        {
+            "request": request,
+            "vuln_rows": vuln_rows,
             "asset_id": asset_id,
             "statuses": _STATUSES,
         },
@@ -394,5 +584,135 @@ async def update_vuln_status_htmx(
             "nvd_url": _NVD_URL.format(cve_id=normalized),
             "asset_id": asset_id,
             "statuses": _STATUSES,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /ingest -- scanner file ingest form
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ingest", response_class=HTMLResponse)
+def ingest_form(request: Request) -> HTMLResponse:
+    """Render the scanner file ingest form."""
+    return templates.TemplateResponse("ingest.html", {"request": request})
+
+
+# ---------------------------------------------------------------------------
+# POST /ingest -- HTMX: file upload, return result fragment
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ingest", response_class=HTMLResponse)
+async def ingest_file_htmx(
+    request: Request,
+    file: UploadFile,
+    default_exposure: str = Form(default="internal"),
+    default_criticality: str = Form(default="medium"),
+) -> HTMLResponse:
+    """HTMX: ingest a scanner file and return a counts/errors result fragment."""
+    if default_exposure not in _VALID_EXPOSURES:
+        default_exposure = "internal"
+    if default_criticality not in _VALID_CRITICALITIES:
+        default_criticality = "medium"
+
+    raw = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        return templates.TemplateResponse(
+            "partials/ingest_result.html",
+            {
+                "request": request,
+                "errors": ["File must be 1 MB or smaller."],
+                "assets_created": 0,
+                "vulns_assigned": 0,
+                "vulns_skipped": 0,
+                "new_assets": [],
+            },
+        )
+
+    content = raw.decode("utf-8", errors="replace")
+    filename = (file.filename or "").lower()
+
+    records = []
+    if filename.endswith(".json"):
+        trivy = parse_trivy_json(content)
+        records = trivy if trivy else parse_grype_json(content)
+    elif filename.endswith(".csv"):
+        nessus = parse_nessus_csv(content)
+        records = nessus if nessus else parse_csv(content)
+    else:
+        return templates.TemplateResponse(
+            "partials/ingest_result.html",
+            {
+                "request": request,
+                "errors": ["File must have a .csv or .json extension."],
+                "assets_created": 0,
+                "vulns_assigned": 0,
+                "vulns_skipped": 0,
+                "new_assets": [],
+            },
+        )
+
+    cmdb: CMDBStore = request.app.state.cmdb
+    kev_set = request.app.state.kev_set
+    cache = request.app.state.cache
+
+    assets_created = 0
+    vulns_assigned = 0
+    vulns_skipped = 0
+    errors: list[str] = []
+    new_assets: list[dict] = []
+
+    # Group by hostname; validate CVE IDs before any DB work
+    by_hostname: dict[str, list[str]] = {}
+    for rec in records:
+        if not re.match(CVE_PATTERN, rec.cve_id):
+            errors.append(f"Skipped invalid CVE ID: {rec.cve_id[:50]}")
+            continue
+        by_hostname.setdefault(rec.hostname, []).append(rec.cve_id)
+
+    scanner = "csv" if filename.endswith(".csv") else "trivy"
+
+    for hostname, cve_ids in by_hostname.items():
+        asset = cmdb.get_asset_by_hostname(hostname)
+        if asset is None:
+            new_asset_obj = Asset(
+                hostname=hostname,
+                environment="production",
+                exposure=default_exposure,
+                criticality=default_criticality,
+            )
+            new_asset_id = cmdb.create_asset(new_asset_obj)
+            asset = cmdb.get_asset(new_asset_id)
+            assets_created += 1
+            new_assets.append({"id": asset.id, "hostname": asset.hostname})
+
+        enriched_list = process_cves(cve_ids, kev_set, cache, exposure=asset.exposure)
+        for enriched in enriched_list:
+            base_priority = enriched.triage_priority
+            effective_priority = apply_criticality_modifier(base_priority, asset.criticality)
+            vuln = AssetVulnerability(
+                asset_id=asset.id,
+                cve_id=enriched.id,
+                base_priority=base_priority,
+                effective_priority=effective_priority,
+                scanner=scanner,
+            )
+            try:
+                cmdb.create_asset_vuln(vuln)
+                vulns_assigned += 1
+            except IntegrityError:
+                vulns_skipped += 1
+
+    return templates.TemplateResponse(
+        "partials/ingest_result.html",
+        {
+            "request": request,
+            "assets_created": assets_created,
+            "vulns_assigned": vulns_assigned,
+            "vulns_skipped": vulns_skipped,
+            "errors": errors,
+            "new_assets": new_assets,
         },
     )

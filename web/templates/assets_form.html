@@ -1,0 +1,184 @@
+{% extends "layout.html" %}
+{% block title %}New Asset — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+<div class="mb-3">
+  <a href="/" class="text-muted text-decoration-none" style="font-size: 0.82rem">
+    &larr; Dashboard
+  </a>
+</div>
+
+<h5 class="fw-bold mb-4" style="color: #e6edf3">Register Asset</h5>
+
+<div class="row g-4">
+
+  {# ── Form column ─────────────────────────────────────────────────── #}
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-body p-4">
+
+        {% if error %}
+        <div class="alert py-2 px-3 mb-4"
+             style="font-size: 0.85rem; border-color: #da3633; background-color: rgba(218,54,51,0.1); color: #f85149">
+          {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/assets">
+
+          <div class="mb-3">
+            <label for="hostname" class="form-label text-muted" style="font-size: 0.82rem">
+              Hostname <span class="text-danger">*</span>
+            </label>
+            <input type="text" id="hostname" name="hostname" required
+                   class="form-control form-control-sm"
+                   style="background-color: #21262d; border-color: #30363d; color: #c9d1d9"
+                   placeholder="web-prod-01.example.com"
+                   value="{{ form_data.hostname or '' }}">
+          </div>
+
+          <div class="mb-3">
+            <label for="ip" class="form-label text-muted" style="font-size: 0.82rem">
+              IP Address
+              <span class="text-muted" style="font-size: 0.75rem">(optional)</span>
+            </label>
+            <input type="text" id="ip" name="ip"
+                   class="form-control form-control-sm"
+                   style="background-color: #21262d; border-color: #30363d; color: #c9d1d9"
+                   placeholder="10.0.0.1"
+                   value="{{ form_data.ip or '' }}">
+          </div>
+
+          <div class="mb-3">
+            <label for="environment" class="form-label text-muted" style="font-size: 0.82rem">Environment</label>
+            <select id="environment" name="environment"
+                    class="form-select form-select-sm"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+              {% for env in ['production', 'staging', 'development'] %}
+              <option value="{{ env }}"
+                {% if (form_data.environment or 'production') == env %}selected{% endif %}>
+                {{ env | title }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="exposure" class="form-label text-muted" style="font-size: 0.82rem">Exposure</label>
+            <select id="exposure" name="exposure"
+                    class="form-select form-select-sm"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+              {% for exp in ['internet', 'internal', 'isolated'] %}
+              <option value="{{ exp }}"
+                {% if (form_data.exposure or 'internal') == exp %}selected{% endif %}>
+                {{ exp | title }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="criticality" class="form-label text-muted" style="font-size: 0.82rem">Criticality</label>
+            <select id="criticality" name="criticality"
+                    class="form-select form-select-sm"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9">
+              {% for crit in ['critical', 'high', 'medium', 'low'] %}
+              <option value="{{ crit }}"
+                {% if (form_data.criticality or 'medium') == crit %}selected{% endif %}>
+                {{ crit | title }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label for="owner" class="form-label text-muted" style="font-size: 0.82rem">
+              Owner
+              <span class="text-muted" style="font-size: 0.75rem">(optional)</span>
+            </label>
+            <input type="text" id="owner" name="owner"
+                   class="form-control form-control-sm"
+                   style="background-color: #21262d; border-color: #30363d; color: #c9d1d9"
+                   placeholder="alice@example.com"
+                   value="{{ form_data.owner or '' }}">
+          </div>
+
+          <div class="mb-4">
+            <label for="tags" class="form-label text-muted" style="font-size: 0.82rem">
+              Tags
+              <span class="text-muted" style="font-size: 0.75rem">(optional, comma-separated)</span>
+            </label>
+            <input type="text" id="tags" name="tags"
+                   class="form-control form-control-sm"
+                   style="background-color: #21262d; border-color: #30363d; color: #c9d1d9"
+                   placeholder="web, k8s, pci-scope"
+                   value="{{ form_data.tags or '' }}">
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.82rem">
+              Register Asset
+            </button>
+            <a href="/"
+               class="btn btn-sm"
+               style="font-size: 0.82rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+              Cancel
+            </a>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# ── Field guidance column ────────────────────────────────────────── #}
+  <div class="col-lg-7">
+    <div class="card">
+      <div class="card-header py-2 px-3">
+        <span class="text-muted" style="font-size: 0.82rem; font-weight: 600">Field Reference</span>
+      </div>
+      <div class="card-body p-4" style="font-size: 0.82rem; color: #8b949e; line-height: 1.7">
+
+        <div class="mb-3">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">Exposure</div>
+          <div>
+            Controls CVE triage priority.
+            <strong style="color: #f85149">internet</strong> — directly reachable from the public
+            internet; upgrades P2s to P1s.
+            <strong style="color: #d29922">internal</strong> — LAN-only, default.
+            <strong style="color: #3fb950">isolated</strong> — air-gapped or strictly controlled.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">Criticality</div>
+          <div>
+            Asset business impact.
+            <strong style="color: #f85149">critical</strong> assets have their P3 vulns upgraded to
+            P2 and P4 to P3.
+            <strong>high</strong>, <strong>medium</strong>, and <strong>low</strong> do not modify
+            triage priority.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">Environment</div>
+          <div>Deployment tier. Informational only -- does not currently affect triage.</div>
+        </div>
+
+        <div>
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">Tags</div>
+          <div>
+            Free-form labels for grouping or filtering.
+            Examples: <code>k8s</code>, <code>pci-scope</code>, <code>dmz</code>.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

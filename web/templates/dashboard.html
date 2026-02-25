@@ -10,11 +10,11 @@
     <div class="text-muted" style="font-size: 0.82rem">Asset-aware vulnerability triage</div>
   </div>
   <div class="d-flex gap-2">
-    <a href="/docs#/Assets/create_asset_api_v1_assets_post"
+    <a href="/assets/new"
        class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">
       + Add Asset
     </a>
-    <a href="/docs#/Assets/ingest_file_api_v1_ingest_post"
+    <a href="/ingest"
        class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">
       Import Scan
     </a>
@@ -169,8 +169,8 @@
     <div class="text-center py-5">
       <div class="text-muted mb-2">No assets registered yet.</div>
       <div style="font-size: 0.82rem; color: #484f58">
-        Use <code>POST /api/v1/assets</code> or <code>POST /api/v1/ingest</code> to add assets,
-        then assign CVEs via <code>POST /api/v1/assets/{id}/vulnerabilities</code>.
+        Use <a href="/assets/new">+ Add Asset</a> to register your first asset,
+        or <a href="/ingest">Import Scan</a> to bulk-load from a scanner file.
       </div>
     </div>
     {% endif %}
