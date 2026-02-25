@@ -147,10 +147,27 @@ def _migrate_assets_table(conn) -> None:
         ("os", "TEXT"),
         ("eol_date", "TEXT"),
         ("compliance", "TEXT"),
+        ("org_id", "INTEGER"),  # reserved: SaaS org isolation (walk phase: always NULL)
     ]
     for col, typ in additions:
         if col not in existing:
             conn.execute(text(f"ALTER TABLE assets ADD COLUMN {col} {typ}"))  # nosemgrep
+    conn.commit()
+
+
+def _migrate_vulns_table(conn) -> None:
+    """Add new columns to an existing asset_vulnerabilities table without dropping data.
+
+    Mirrors _migrate_assets_table. Column names are constants, not user input,
+    so string interpolation in ALTER TABLE is safe and unavoidable.
+    """
+    existing = {row[1] for row in conn.execute(text("PRAGMA table_info(asset_vulnerabilities)"))}
+    additions = [
+        ("org_id", "INTEGER"),  # reserved: SaaS org isolation (walk phase: always NULL)
+    ]
+    for col, typ in additions:
+        if col not in existing:
+            conn.execute(text(f"ALTER TABLE asset_vulnerabilities ADD COLUMN {col} {typ}"))  # nosemgrep
     conn.commit()
 
 
@@ -171,6 +188,7 @@ class CMDBStore:
         metadata.create_all(self.engine)
         with self.engine.connect() as conn:
             _migrate_assets_table(conn)
+            _migrate_vulns_table(conn)
 
     # ------------------------------------------------------------------
     # Assets

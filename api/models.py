@@ -13,13 +13,16 @@ from typing import Annotated, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from core.models import EnrichedCVE
+from core.models import CVE_PATTERN, EnrichedCVE
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-CVE_PATTERN = r"^CVE-\d{4}-\d{4,}$"
+# CVE_PATTERN is the domain truth -- lives in core/models.py.
+# Re-exported here for backwards compatibility with any code that imported it
+# from api.models before it was moved.
+__all__ = ["CVE_PATTERN"]
 
 # Annotated type that applies the CVE pattern to every element in a list.
 # Pydantic v2 validates each item against the constraint when used as list[_CveId].
@@ -356,3 +359,115 @@ class DashboardResponse(BaseModel):
     total_open_vulns: int
     priority_counts: dict[str, int]
     top_assets_by_p1: list[dict]
+
+
+# ---------------------------------------------------------------------------
+# Auth -- request models
+# ---------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    """Request body for POST /api/v1/auth/login."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    username: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=1, max_length=255)
+
+
+class ApiKeyCreate(BaseModel):
+    """Request body for POST /api/v1/auth/api-keys."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=100)
+
+
+class UserCreate(BaseModel):
+    """Request body for POST /api/v1/auth/users (admin only)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    username: str = Field(min_length=1, max_length=255)
+    role: str = Field(default="analyst", pattern="^(admin|analyst|viewer)$")
+    password: Optional[str] = Field(default=None, min_length=8, max_length=255)
+
+
+class UserPatch(BaseModel):
+    """Request body for PATCH /api/v1/auth/users/{id} (admin only).
+
+    All fields are optional -- send only what should change.
+    """
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    role: Optional[str] = Field(default=None, pattern="^(admin|analyst|viewer)$")
+    is_active: Optional[bool] = None
+
+
+# ---------------------------------------------------------------------------
+# Auth -- response models
+# ---------------------------------------------------------------------------
+
+
+class LoginResponse(BaseModel):
+    """Response for POST /api/v1/auth/login."""
+
+    model_config = ConfigDict(frozen=True)
+
+    access_token: str
+    token_type: str = "bearer"  # noqa: S105 -- OAuth token type, not a password
+    expires_in: int  # seconds (28800 = 8 hours)
+    username: str
+    role: str
+
+
+class MeResponse(BaseModel):
+    """Response for GET /api/v1/auth/me."""
+
+    model_config = ConfigDict(frozen=True)
+
+    user_id: int
+    username: str
+    role: str
+    oauth_provider: Optional[str]
+
+
+class ApiKeyResponse(BaseModel):
+    """One API key record in list responses. Raw key value never included."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    name: str
+    key_prefix: str
+    created_at: str
+    last_used: Optional[str]
+
+
+class ApiKeyCreatedResponse(ApiKeyResponse):
+    """Response for POST /api/v1/auth/api-keys. Includes raw key shown ONCE."""
+
+    key: str  # raw key -- shown once at creation, never stored or returned again
+
+
+class UserResponse(BaseModel):
+    """User record in admin list/create/update responses."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    username: str
+    role: str
+    oauth_provider: Optional[str]
+    is_active: bool
+    created_at: str
+
+
+class OAuthProviderInfo(BaseModel):
+    """One enabled OAuth provider entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str  # "github", "google", "oidc"
+    label: str  # "GitHub", "Google", display name from OIDC_DISPLAY_NAME

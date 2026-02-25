@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+
+{% block title %}Login — VulnAdvisor{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-sm-10 col-md-7 col-lg-5 col-xl-4">
+
+    <div class="text-center mb-4">
+      <h1 class="h4 fw-bold">
+        <span style="color: #388bfd">Vuln</span><span style="color: #c9d1d9">Advisor</span>
+      </h1>
+      <p class="text-secondary" style="font-size: 0.9rem">Sign in to continue</p>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-4">
+
+        {% if error_msg %}
+        <div class="alert alert-danger py-2 px-3 mb-3" style="font-size: 0.875rem">
+          {{ error_msg }}
+        </div>
+        {% endif %}
+
+        <!-- Username / Password form -->
+        <form method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}">
+          <div class="mb-3">
+            <label for="username" class="form-label text-secondary" style="font-size: 0.85rem">Username</label>
+            <input
+              type="text"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="username"
+              name="username"
+              autocomplete="username"
+              required
+            >
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label text-secondary" style="font-size: 0.85rem">Password</label>
+            <input
+              type="password"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="password"
+              name="password"
+              autocomplete="current-password"
+              required
+            >
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Sign in</button>
+        </form>
+
+        {% if providers %}
+        <!-- OAuth divider (only shown when at least one provider is configured) -->
+        <div class="d-flex align-items-center my-3">
+          <hr class="flex-grow-1 border-secondary">
+          <span class="px-2 text-secondary" style="font-size: 0.8rem">OR</span>
+          <hr class="flex-grow-1 border-secondary">
+        </div>
+
+        <!-- OAuth provider buttons -->
+        <div class="d-grid gap-2">
+          {% for provider in providers %}
+          <a
+            href="/login/oauth/{{ provider.name }}{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}"
+            class="btn btn-outline-secondary btn-sm"
+          >
+            Continue with {{ provider.label }}
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
