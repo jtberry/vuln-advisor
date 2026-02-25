@@ -1,18 +1,10 @@
 """
 fetcher.py -- All external data fetching.
-<<<<<<< feature/issue-19-fetchkev-race
-All sources are free and require no API keys.
-"""
-
-import logging
-=======
 All sources are free. NVD optionally accepts an API key for higher rate limits.
 """
 
 import logging
 import os
-import threading
->>>>>>> develop
 from typing import Any, Optional
 
 import requests
