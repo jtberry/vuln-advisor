@@ -9,13 +9,14 @@ Returns a single payload suitable for driving dashboard widgets:
 This is a read-only aggregate route -- no mutations here.
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
 from api.limiter import limiter
 from api.models import DashboardResponse
+from auth.dependencies import get_current_user
 from cmdb.store import CMDBStore
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @limiter.limit("60/minute")

@@ -1,0 +1,84 @@
+{% extends "layout.html" %}
+
+{% block title %}First-Run Setup — VulnAdvisor{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-sm-10 col-md-7 col-lg-5 col-xl-4">
+
+    <div class="text-center mb-4">
+      <h1 class="h4 fw-bold">
+        <span style="color: #388bfd">Vuln</span><span style="color: #c9d1d9">Advisor</span>
+      </h1>
+      <p class="text-secondary" style="font-size: 0.9rem">Create your first admin account</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="font-size: 0.9rem">Initial Setup</span>
+      </div>
+      <div class="card-body p-4">
+
+        <p class="text-secondary mb-4" style="font-size: 0.85rem">
+          No users exist yet. Create an admin account to get started. This page
+          will no longer be accessible after setup is complete.
+        </p>
+
+        {% if error_msg %}
+        <div class="alert alert-danger py-2 px-3 mb-3" style="font-size: 0.875rem">
+          {{ error_msg }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/setup">
+          <div class="mb-3">
+            <label for="username" class="form-label text-secondary" style="font-size: 0.85rem">
+              Admin username
+            </label>
+            <input
+              type="text"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="username"
+              name="username"
+              autocomplete="username"
+              placeholder="e.g. admin or your email"
+              required
+            >
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label text-secondary" style="font-size: 0.85rem">
+              Password <span class="text-muted">(min 8 characters)</span>
+            </label>
+            <input
+              type="password"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="password"
+              name="password"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            >
+          </div>
+          <div class="mb-4">
+            <label for="confirm_password" class="form-label text-secondary" style="font-size: 0.85rem">
+              Confirm password
+            </label>
+            <input
+              type="password"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="confirm_password"
+              name="confirm_password"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            >
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Create admin account</button>
+        </form>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -6,7 +6,7 @@ tools can consume triage results without running the CLI.
 
 Install deps:  pip install -r requirements-api.txt
 Run with:      make run-api
-               uvicorn api.main:app --reload
+               uvicorn asgi:app --reload
 
 Middleware stack (outermost to innermost):
   1. TrustedHostMiddleware -- rejects requests with unexpected Host headers
@@ -25,23 +25,30 @@ import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse, RedirectResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from api.limiter import limiter
 from api.models import ErrorDetail, ErrorResponse, HealthResponse
 from api.routes.v1.assets import router as assets_router
+from api.routes.v1.auth import router as auth_router
 from api.routes.v1.cve import router as cve_router
 from api.routes.v1.dashboard import router as dashboard_router
+from auth.dependencies import get_current_user
+from auth.models import User
+from auth.oauth import oauth as oauth_client
+from auth.store import UserStore
+from auth.tokens import _SECRET_KEY
 from cache.store import CVECache
 from cmdb.store import CMDBStore
 from core.fetcher import fetch_kev
-from web.routes import router as web_router
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -101,11 +108,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if kev_data:
         logger.info("KEV feed loaded (%d entries)", len(kev_data))
     else:
-        logger.warning("KEV feed unavailable — exploit status checks will be skipped")
+        logger.warning("KEV feed unavailable -- exploit status checks will be skipped")
     app.state.cache = CVECache()
     logger.info("Cache initialized")
     app.state.cmdb = CMDBStore()
     logger.info("CMDB initialized")
+    # Auth store and OAuth registry
+    app.state.user_store = UserStore()
+    app.state.setup_required = not app.state.user_store.has_users()
+    app.state.oauth = oauth_client
+    logger.info(
+        "Auth initialized (setup_required=%s)",
+        app.state.setup_required,
+    )
     app.state.purge_task = asyncio.create_task(_purge_loop(app))
 
     yield
@@ -114,6 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.purge_task.cancel()
     app.state.cache.close()
     app.state.cmdb.close()
+    app.state.user_store.close()
     logger.info("VulnAdvisor API shutdown complete")
 
 
@@ -126,8 +142,10 @@ app = FastAPI(
     description="CVE triage and remediation guidance. Data from NVD, CISA KEV, EPSS, and PoC-in-GitHub.",
     version="0.2.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # Disable built-in /docs and /redoc so we can add auth protection.
+    # Auth-protected equivalents are registered below.
+    docs_url=None,
+    redoc_url=None,
 )
 
 # ---------------------------------------------------------------------------
@@ -147,16 +165,51 @@ app.add_middleware(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost", "http://localhost:3000", "http://127.0.0.1"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     max_age=3600,
 )
 
 app.add_middleware(SlowAPIMiddleware)
 
+# SessionMiddleware is required by authlib to store the OAuth state value
+# between the authorization redirect and the callback. This is the standard
+# CSRF protection mechanism for OAuth 2.0 authorization code flow -- the state
+# is set in the session before redirecting to the provider, then verified in
+# the callback. Without session middleware, authlib cannot store state and
+# the OAuth flow fails.
+app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY)
+
 # Attach the shared limiter to app.state so SlowAPIMiddleware can locate it.
 # SlowAPI looks for app.state.limiter by convention.
 app.state.limiter = limiter
+
+# ---------------------------------------------------------------------------
+# Setup redirect middleware
+#
+# If no users have been created yet, redirect every request to /setup so the
+# first admin account can be created before any other page is accessible.
+# Exempt /setup itself, /static/, and /api/v1/health to avoid redirect loops.
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def setup_redirect(request: Request, call_next):
+    """Redirect all requests to /setup when no users exist (first-run state).
+
+    The setup_required flag is set in lifespan and cleared by POST /setup
+    once the first admin is created. It is an in-memory flag, not re-checked
+    on every request to avoid a DB call on every hit. POST /setup re-checks
+    at the DB level to guard against the race condition where two concurrent
+    requests both pass the flag check before either creates a user [M1].
+    """
+    path = request.url.path
+    if getattr(request.app.state, "setup_required", False):
+        exempt = ("/setup", "/api/v1/health")
+        if path not in exempt and not path.startswith(("/static/",)):
+            return RedirectResponse("/setup", status_code=302)
+    return await call_next(request)
+
 
 # ---------------------------------------------------------------------------
 # Request logging middleware
@@ -190,11 +243,35 @@ async def log_requests(request: Request, call_next):
 # Router registration
 # ---------------------------------------------------------------------------
 
+app.include_router(auth_router, prefix="/api/v1", tags=["Auth"])
 app.include_router(cve_router, prefix="/api/v1", tags=["CVE Triage"])
 app.include_router(assets_router, prefix="/api/v1", tags=["Assets"])
-# Web router has no prefix -- serves / and /assets/{id}
-app.include_router(web_router, tags=["Web UI"])
 app.include_router(dashboard_router, prefix="/api/v1", tags=["Dashboard"])
+# Web UI router is mounted by asgi.py, not here.
+# api/ and web/ are independent layers -- only the top-level asgi.py imports both.
+
+
+# ---------------------------------------------------------------------------
+# Auth-protected API documentation
+#
+# /docs and /redoc are disabled on the FastAPI() constructor (docs_url=None,
+# redoc_url=None) and replaced here with custom routes that require a valid
+# JWT cookie or Bearer token. This prevents unauthenticated users from
+# browsing the full API schema.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/docs", include_in_schema=False)
+async def docs(user: User = Depends(get_current_user)):
+    """Swagger UI -- requires authentication."""
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="VulnAdvisor API")
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc(user: User = Depends(get_current_user)):
+    """ReDoc UI -- requires authentication."""
+    return get_redoc_html(openapi_url="/openapi.json", title="VulnAdvisor API")
+
 
 # ---------------------------------------------------------------------------
 # Exception handlers

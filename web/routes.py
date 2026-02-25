@@ -9,20 +9,29 @@ Route registration order matters. FastAPI resolves same-level paths in order:
     before GET /cve/{cve_id} or FastAPI captures "lookup"/"bulk" as path params.
   - GET /assets/new and POST /assets must be registered before GET /assets/{asset_id}
     or FastAPI captures "new" as a path parameter.
+  - GET /login/oauth/{provider} and GET /login/callback/{provider} must be
+    registered before GET /login or FastAPI may misroute them.
 
 Routes:
-  GET  /                                              -- risk dashboard
+  GET  /                                              -- risk dashboard (auth required)
   GET  /cve                                           -- CVE research page
   POST /cve/lookup                                    -- HTMX: single CVE card
   POST /cve/bulk                                      -- HTMX: bulk results table
   GET  /cve/{cve_id}                                  -- full CVE detail
-  GET  /assets/new                                    -- asset creation form
+  GET  /assets/new                                    -- asset creation form (auth required)
   POST /assets                                        -- handle creation, redirect to /assets/{id}
-  GET  /assets/{asset_id}                             -- asset detail
+  GET  /assets/{asset_id}                             -- asset detail (auth required)
   POST /assets/{asset_id}/vulnerabilities             -- HTMX: add CVEs, return updated tbody
   POST /assets/{asset_id}/vulnerabilities/{cve}/status -- HTMX: row update
-  GET  /ingest                                        -- scanner file ingest form
+  GET  /ingest                                        -- scanner file ingest form (auth required)
   POST /ingest                                        -- HTMX: file upload, return result fragment
+  GET  /login/oauth/{provider}                        -- OAuth redirect to provider
+  GET  /login/callback/{provider}                     -- OAuth callback handler
+  GET  /login                                         -- login form
+  POST /login                                         -- handle password login
+  POST /logout                                        -- clear cookie, redirect /login
+  GET  /setup                                         -- first-run wizard
+  POST /setup                                         -- create first admin
 """
 
 import logging
@@ -31,21 +40,77 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError
 
-from api.models import CVE_PATTERN
+from auth.dependencies import try_get_current_user
+from auth.oauth import get_enabled_providers, get_oauth_user_info
+from auth.store import UserStore
+from auth.tokens import authenticate_user, create_access_token, hash_password, set_auth_cookie
 from cmdb.ingest import parse_csv, parse_grype_json, parse_nessus_csv, parse_trivy_json
 from cmdb.models import Asset, AssetVulnerability
 from cmdb.store import CMDBStore, apply_criticality_modifier
+from core.models import CVE_PATTERN
 from core.pipeline import process_cve, process_cves
 
 logger = logging.getLogger("vulnadvisor.web")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+# Expose try_get_current_user as a Jinja2 global so layout.html can call it
+# without requiring every route handler to manually include current_user in the
+# template context. The function receives the request object from the template
+# context (always present) and returns the User or None.
+templates.env.globals["try_get_current_user"] = try_get_current_user
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Auth helpers
+# ---------------------------------------------------------------------------
+
+# Whitelist mapping for ?error= query params on /login [M3].
+# The raw query param is NEVER passed to templates -- only the message from
+# this dict is. Prevents reflected XSS via crafted error query strings.
+_ERROR_MESSAGES: dict[str, str] = {
+    "bad_credentials": "Invalid username or password.",
+    "not_provisioned": "Your account has not been provisioned. Contact an admin.",
+    "account_disabled": "Your account has been disabled. Contact an admin.",
+    "oauth_failed": "OAuth authentication failed. Please try again.",
+    "setup_complete": "Setup already complete. Please log in.",
+}
+
+
+def _safe_next(next_url: Optional[str]) -> str:
+    """Validate a post-login redirect target. Only accept relative paths. [C2]
+
+    Prevents open redirect attacks where an attacker crafts a URL like:
+      /login?next=https://attacker.com  or  /login?next=//attacker.com
+
+    Both would redirect off-site after login. We only allow paths that:
+    - Start with "/" (relative, server-local)
+    - Do NOT start with "//" (protocol-relative URL, redirects off-site)
+    """
+    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
+        return next_url
+    return "/"
+
+
+def _require_auth(request: Request) -> Optional[RedirectResponse]:
+    """Check if the current request is authenticated.
+
+    Returns a RedirectResponse to /login if not authenticated, None if OK.
+    Call at the top of protected route handlers:
+        if redirect := _require_auth(request):
+            return redirect
+    """
+    user = try_get_current_user(request)
+    if user is None:
+        path = request.url.path
+        return RedirectResponse(f"/login?next={path}", status_code=302)
+    return None
+
 
 _NVD_URL = "https://nvd.nist.gov/vuln/detail/{cve_id}"
 _STATUSES = ["pending", "in_progress", "verified", "closed", "deferred"]
@@ -131,6 +196,8 @@ _PAGE_SIZE = 25
 
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, page: int = 1) -> HTMLResponse:
+    if redirect := _require_auth(request):
+        return redirect
     cmdb: CMDBStore = request.app.state.cmdb
     assets = cmdb.list_assets()
     priority_counts = cmdb.get_all_priority_counts()
@@ -348,6 +415,8 @@ def cve_detail(
 @router.get("/assets/new", response_class=HTMLResponse)
 def asset_create_form(request: Request) -> HTMLResponse:
     """Render the asset registration form."""
+    if redirect := _require_auth(request):
+        return redirect
     return templates.TemplateResponse(
         "assets_form.html",
         {"request": request, "error": None, "form_data": {}, "compliance_options": _COMPLIANCE_OPTIONS},
@@ -463,6 +532,8 @@ async def asset_create(
 
 @router.get("/assets/{asset_id}", response_class=HTMLResponse)
 def asset_detail(request: Request, asset_id: int) -> HTMLResponse:
+    if redirect := _require_auth(request):
+        return redirect
     cmdb: CMDBStore = request.app.state.cmdb
     asset = cmdb.get_asset(asset_id)
     if asset is None:
@@ -654,6 +725,8 @@ async def update_vuln_status_htmx(
 @router.get("/assets/{asset_id}/edit", response_class=HTMLResponse)
 def asset_edit_form(request: Request, asset_id: int) -> HTMLResponse:
     """Render the asset edit form, pre-populated with current values."""
+    if redirect := _require_auth(request):
+        return redirect
     cmdb: CMDBStore = request.app.state.cmdb
     asset = cmdb.get_asset(asset_id)
     if asset is None:
@@ -796,6 +869,8 @@ async def asset_update(
 @router.get("/ingest", response_class=HTMLResponse)
 def ingest_form(request: Request) -> HTMLResponse:
     """Render the scanner file ingest form."""
+    if redirect := _require_auth(request):
+        return redirect
     return templates.TemplateResponse("ingest.html", {"request": request})
 
 
@@ -916,3 +991,211 @@ async def ingest_file_htmx(
             "new_assets": new_assets,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Auth routes -- login, logout, setup, OAuth
+# ---------------------------------------------------------------------------
+
+# Route registration order: /login/oauth/{provider} and /login/callback/{provider}
+# must come before GET /login so FastAPI doesn't treat "oauth" as a path param
+# of some hypothetical /login/{something} route. We define all /login sub-paths
+# first, then the base /login routes.
+
+
+@router.get("/login/oauth/{provider}", response_class=HTMLResponse)
+async def oauth_redirect(request: Request, provider: str) -> RedirectResponse:
+    """Redirect the browser to the OAuth provider's authorization page.
+
+    Validates the provider name against the enabled provider list before
+    redirecting. This prevents an attacker from crafting a redirect to an
+    arbitrary URL via a spoofed provider name.
+    """
+    enabled = {p["name"] for p in get_enabled_providers()}
+    if provider not in enabled:
+        return RedirectResponse("/login?error=oauth_failed", status_code=302)
+
+    oauth_registry = request.app.state.oauth
+    client = oauth_registry.create_client(provider)
+    redirect_uri = str(request.url_for("oauth_callback", provider=provider))
+    return await client.authorize_redirect(request, redirect_uri)
+
+
+@router.get("/login/callback/{provider}", response_class=HTMLResponse, name="oauth_callback")
+async def oauth_callback(request: Request, provider: str) -> RedirectResponse:
+    """Handle the OAuth provider callback and issue a JWT cookie.
+
+    Flow:
+      1. Exchange authorization code for token (authlib handles CSRF via session state).
+      2. Extract (email, subject_id) from the token -- raises ValueError if unverified [H1].
+      3. Look up by (provider, subject_id) -- fast path for returning users.
+      4. If not found, look up by username (email) -- first login, link OAuth identity.
+      5. Reject unknown emails (not_provisioned) and inactive accounts.
+      6. Issue JWT, set cookie, redirect to ?next or /.
+    """
+    enabled = {p["name"] for p in get_enabled_providers()}
+    if provider not in enabled:
+        return RedirectResponse("/login?error=oauth_failed", status_code=302)
+
+    oauth_registry = request.app.state.oauth
+    user_store: UserStore = request.app.state.user_store
+    client = oauth_registry.create_client(provider)
+
+    # Step 1: Exchange code for token
+    try:
+        token = await client.authorize_access_token(request)
+    except OAuthError:
+        logger.exception("OAuth token exchange failed for provider %r", provider)
+        return RedirectResponse("/login?error=oauth_failed", status_code=302)
+
+    # Step 2: Extract verified email and stable subject ID [H1]
+    try:
+        email, oauth_subject = await get_oauth_user_info(client, provider, token)
+    except ValueError:
+        logger.warning("OAuth login rejected: unverified or missing email from %r", provider)
+        return RedirectResponse("/login?error=oauth_failed", status_code=302)
+
+    # Step 3: Fast path -- returning user already linked
+    user = user_store.get_by_oauth(provider, oauth_subject)
+
+    # Step 4: First login -- match by pre-created username (email), link identity
+    if user is None:
+        user = user_store.get_by_username(email)
+        if user is not None and user.oauth_subject is None:
+            # Pre-created account, not yet linked. Link now.
+            user_store.link_oauth(user.id, provider, oauth_subject)
+            user = user_store.get_by_id(user.id)  # refresh after link
+        elif user is None:
+            # No pre-created account for this email.
+            return RedirectResponse("/login?error=not_provisioned", status_code=302)
+
+    # Step 5: Check account is active
+    if not user.is_active:
+        return RedirectResponse("/login?error=account_disabled", status_code=302)
+
+    # Step 6: Issue JWT, set cookie, redirect
+    token_str = create_access_token(user.id, user.username, user.role)
+    next_url = _safe_next(request.query_params.get("next"))  # [C2]
+    resp = RedirectResponse(next_url, status_code=302)
+    set_auth_cookie(resp, token_str)
+    resp.headers["Cache-Control"] = "no-store"  # [M5]
+    return resp
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_form(request: Request) -> HTMLResponse:
+    """Render the login page with username/password form and OAuth buttons."""
+    # Redirect already-authenticated users to /
+    if try_get_current_user(request) is not None:
+        return RedirectResponse("/", status_code=302)
+
+    # Map ?error= query param through whitelist [M3]
+    error_msg = _ERROR_MESSAGES.get(request.query_params.get("error", ""), None)
+    providers = get_enabled_providers()
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "error_msg": error_msg,
+            "providers": providers,
+        },
+    )
+
+
+@router.post("/login", response_class=HTMLResponse)
+def login_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+) -> RedirectResponse:
+    """Handle username/password login form submission."""
+    user_store: UserStore = request.app.state.user_store
+    user = authenticate_user(user_store, username, password)  # [C1] timing equalization
+    if user is None:
+        return RedirectResponse("/login?error=bad_credentials", status_code=302)
+
+    token = create_access_token(user.id, user.username, user.role)
+    next_url = _safe_next(request.query_params.get("next"))  # [C2]
+    resp = RedirectResponse(next_url, status_code=302)
+    set_auth_cookie(resp, token)
+    resp.headers["Cache-Control"] = "no-store"  # [M5]
+    return resp
+
+
+@router.post("/logout")
+def logout(request: Request) -> RedirectResponse:
+    """Clear the JWT cookie and redirect to the login page."""
+    resp = RedirectResponse("/login", status_code=302)
+    resp.delete_cookie("access_token")
+    return resp
+
+
+@router.get("/setup", response_class=HTMLResponse)
+def setup_form(request: Request) -> HTMLResponse:
+    """Render the first-run setup wizard.
+
+    Returns 404 after the first admin account has been created. The setup
+    redirect middleware also enforces this by only redirecting when
+    setup_required is True -- once False, this page becomes inaccessible
+    via normal navigation. Returning 404 (not redirect) prevents any ambiguity.
+    """
+    if not getattr(request.app.state, "setup_required", True):
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse("setup.html", {"request": request})
+
+
+@router.post("/setup", response_class=HTMLResponse)
+def setup_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+) -> RedirectResponse:
+    """Create the first admin account.
+
+    [M1] Race condition guard: re-checks has_users() inside the handler even
+    though the middleware already checked setup_required. Two concurrent requests
+    could both pass the middleware check before either creates a user. The DB-
+    level check and IntegrityError catch ensure only one wins.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    user_store: UserStore = request.app.state.user_store
+
+    # Re-check at DB level [M1]
+    if user_store.has_users():
+        return RedirectResponse("/login?error=setup_complete", status_code=302)
+
+    if password != confirm_password:
+        return templates.TemplateResponse(
+            "setup.html",
+            {"request": request, "error_msg": "Passwords do not match."},
+        )
+    if len(password) < 8:
+        return templates.TemplateResponse(
+            "setup.html",
+            {"request": request, "error_msg": "Password must be at least 8 characters."},
+        )
+    if not username.strip():
+        return templates.TemplateResponse(
+            "setup.html",
+            {"request": request, "error_msg": "Username is required."},
+        )
+
+    from auth.models import User as AuthUser
+
+    new_admin = AuthUser(
+        username=username.strip(),
+        role="admin",
+        hashed_password=hash_password(password),
+    )
+    try:
+        user_store.create_user(new_admin)
+        request.app.state.setup_required = False
+    except IntegrityError:
+        # Race condition: another request created an admin first [M1]
+        return RedirectResponse("/login?error=setup_complete", status_code=302)
+
+    return RedirectResponse("/login", status_code=302)

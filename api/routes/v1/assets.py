@@ -22,7 +22,7 @@ File uploads:
 
 import re
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.exc import IntegrityError
 
 from api.limiter import limiter
@@ -37,12 +37,16 @@ from api.models import (
     ErrorDetail,
     IngestResponse,
 )
+from auth.dependencies import get_current_user
 from cmdb.ingest import IngestRecord, parse_csv, parse_grype_json, parse_nessus_csv, parse_trivy_json
 from cmdb.models import Asset, AssetVulnerability
 from cmdb.store import CMDBStore, apply_criticality_modifier
 from core.pipeline import process_cves
 
-router = APIRouter()
+# All asset and ingest routes require authentication.
+# Router-level dependency applies to every route registered on this router,
+# so individual handlers don't each need to repeat Depends(get_current_user).
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 _MAX_UPLOAD_BYTES = 1 * 1024 * 1024  # 1 MB
 

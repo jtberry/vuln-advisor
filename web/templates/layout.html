@@ -94,10 +94,30 @@
          href="/ingest">Ingest</a>
     </li>
   </ul>
-  <ul class="navbar-nav ms-auto">
+  <ul class="navbar-nav ms-auto align-items-center gap-2">
     <li class="nav-item">
       <a class="nav-link text-secondary" href="/docs" style="font-size: 0.85rem">API Docs</a>
     </li>
+    {% set current_user = try_get_current_user(request) %}
+    {% if current_user %}
+      <li class="nav-item d-flex align-items-center gap-2">
+        <span class="text-secondary" style="font-size: 0.85rem">{{ current_user.username }}</span>
+        <span class="badge
+          {% if current_user.role == 'admin' %}bg-danger
+          {% elif current_user.role == 'analyst' %}bg-primary
+          {% else %}bg-secondary{% endif %}
+          " style="font-size: 0.7rem">{{ current_user.role }}</span>
+      </li>
+      <li class="nav-item">
+        <form method="post" action="/logout" class="d-inline">
+          <button type="submit" class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">Logout</button>
+        </form>
+      </li>
+    {% else %}
+      <li class="nav-item">
+        <a class="nav-link text-secondary" href="/login" style="font-size: 0.85rem">Login</a>
+      </li>
+    {% endif %}
   </ul>
 </nav>
 
