@@ -1,10 +1,9 @@
 """
-fetcher.py — All external data fetching.
+fetcher.py -- All external data fetching.
 All sources are free and require no API keys.
 """
 
 import logging
-import threading
 from typing import Any, Optional
 
 import requests
@@ -17,13 +16,10 @@ EPSS_API = "https://api.first.org/data/v1/epss"
 POC_GITHUB = "https://raw.githubusercontent.com/nomi-sec/PoC-in-GitHub/master/{year}/{cve_id}.json"
 
 # Module-level session shared across all fetcher calls for connection pooling.
-# max_redirects=3 replaces the requests default of 30 — these are known public APIs,
+# max_redirects=3 replaces the requests default of 30 -- these are known public APIs,
 # 3 hops is generous and protects against open redirect / SSRF via redirect chains.
 _session = requests.Session()
 _session.max_redirects = 3
-
-_kev_cache: Optional[set[str]] = None
-_kev_lock = threading.Lock()
 
 
 def fetch_nvd(cve_id: str, api_key: Optional[str] = None) -> Optional[dict[str, Any]]:
@@ -47,26 +43,25 @@ def fetch_nvd(cve_id: str, api_key: Optional[str] = None) -> Optional[dict[str, 
 
 
 def fetch_kev() -> set[str]:
-    """Fetch CISA Known Exploited Vulnerabilities catalog (cached for session).
+    """Fetch CISA Known Exploited Vulnerabilities catalog and return the CVE ID set.
 
-    Thread-safe via double-checked locking: check under lock, fetch outside lock
-    (network I/O must not block other threads), write result under lock.
+    Pure stateless function -- fetches from CISA on every call and returns
+    the result directly. No module-level caching; that is the caller's concern.
+
+    In the API server, api/main.py lifespan calls this via _load_kev() which
+    wraps it with CVECache. This keeps core/ free of any cache or concurrency
+    concerns -- no global state, no locks, no threading import needed.
+
+    Returns an empty set on network failure so callers always get a valid set.
     """
-    global _kev_cache
-    with _kev_lock:
-        if _kev_cache is not None:
-            return _kev_cache
     try:
         resp = _session.get(CISA_KEV_URL, timeout=10)
         resp.raise_for_status()
         entries = resp.json().get("vulnerabilities", [])
-        kev_set: set[str] = {e["cveID"] for e in entries}
+        return {e["cveID"] for e in entries}
     except requests.RequestException as e:
         logger.warning("Could not fetch CISA KEV feed: %s", e)
-        kev_set = set()
-    with _kev_lock:
-        _kev_cache = kev_set
-    return kev_set
+        return set()
 
 
 def fetch_epss(cve_id: str) -> dict[str, Any]:
