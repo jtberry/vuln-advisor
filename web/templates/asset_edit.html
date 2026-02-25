@@ -1,15 +1,15 @@
 {% extends "layout.html" %}
-{% block title %}New Asset — VulnAdvisor{% endblock %}
+{% block title %}Edit {{ asset.hostname }} — VulnAdvisor{% endblock %}
 
 {% block content %}
 
 <div class="mb-3">
-  <a href="/" class="text-muted text-decoration-none" style="font-size: 0.82rem">
-    &larr; Dashboard
+  <a href="/assets/{{ asset.id }}" class="text-muted text-decoration-none" style="font-size: 0.82rem">
+    &larr; {{ asset.hostname }}
   </a>
 </div>
 
-<h5 class="fw-bold mb-4" style="color: #e6edf3">Register Asset</h5>
+<h5 class="fw-bold mb-4" style="color: #e6edf3">Edit Asset</h5>
 
 <div class="row g-4">
 
@@ -25,7 +25,7 @@
         </div>
         {% endif %}
 
-        <form method="POST" action="/assets">
+        <form method="POST" action="/assets/{{ asset.id }}">
 
           <div class="mb-3">
             <label for="hostname" class="form-label text-muted" style="font-size: 0.82rem">
@@ -161,9 +161,9 @@
 
           <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary btn-sm" style="font-size: 0.82rem">
-              Register Asset
+              Save Changes
             </button>
-            <a href="/"
+            <a href="/assets/{{ asset.id }}"
                class="btn btn-sm"
                style="font-size: 0.82rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
               Cancel
@@ -206,19 +206,6 @@
         </div>
 
         <div class="mb-3">
-          <div class="fw-semibold mb-1" style="color: #c9d1d9">Environment</div>
-          <div>Deployment tier. Informational only -- does not currently affect triage.</div>
-        </div>
-
-        <div class="mb-3">
-          <div class="fw-semibold mb-1" style="color: #c9d1d9">Tags</div>
-          <div>
-            Free-form labels for grouping or filtering.
-            Examples: <code>k8s</code>, <code>pci-scope</code>, <code>dmz</code>.
-          </div>
-        </div>
-
-        <div class="mb-3">
           <div class="fw-semibold mb-1" style="color: #c9d1d9">OS End-of-Life Date</div>
           <div>
             The date the operating system stops receiving security patches. Assets past EOL are
@@ -226,11 +213,19 @@
           </div>
         </div>
 
-        <div>
+        <div class="mb-3">
           <div class="fw-semibold mb-1" style="color: #c9d1d9">Compliance Frameworks</div>
           <div>
             Which regulatory or security frameworks this asset is in scope for.
             Used for reporting and filtering. Does not affect triage priority.
+          </div>
+        </div>
+
+        <div>
+          <div class="fw-semibold mb-1" style="color: #c9d1d9">Tags</div>
+          <div>
+            Free-form labels for grouping or filtering.
+            Examples: <code>k8s</code>, <code>pci-scope</code>, <code>dmz</code>.
           </div>
         </div>
 

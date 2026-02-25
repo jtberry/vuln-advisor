@@ -31,14 +31,37 @@
           {% for tag in asset.tags %}
           <span class="badge" style="background-color: #21262d; color: #8b949e">{{ tag }}</span>
           {% endfor %}
+          {% for framework in asset.compliance %}
+          <span class="badge" style="background-color: #1c2d3e; color: #58a6ff; border: 1px solid #1f6feb">
+            {{ framework }}
+          </span>
+          {% endfor %}
         </div>
       </div>
 
-      <div class="text-muted" style="font-size: 0.8rem; text-align: right">
-        {% if asset.owner %}
-        <div>Owner: <span style="color: #c9d1d9">{{ asset.owner }}</span></div>
-        {% endif %}
-        <div>Registered: {{ asset.created_at[:10] }}</div>
+      <div class="d-flex flex-column align-items-end gap-2">
+        <a href="/assets/{{ asset.id }}/edit"
+           class="btn btn-sm"
+           style="font-size: 0.78rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          Edit
+        </a>
+        <div class="text-muted" style="font-size: 0.8rem; text-align: right">
+          {% if asset.owner %}
+          <div>Owner: <span style="color: #c9d1d9">{{ asset.owner }}</span></div>
+          {% endif %}
+          <div>Registered: {{ asset.created_at[:10] }}</div>
+          {% if asset.os %}
+          <div>OS: <span style="color: #c9d1d9">{{ asset.os }}</span></div>
+          {% endif %}
+          <div>
+            EOL:
+            {% if eol_info.badge %}
+            <span class="badge {{ eol_info.css }}" style="font-size: 0.72rem">{{ eol_info.text }}</span>
+            {% else %}
+            <span class="{{ eol_info.css }}">{{ eol_info.text }}</span>
+            {% endif %}
+          </div>
+        </div>
       </div>
 
     </div>

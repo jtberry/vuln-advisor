@@ -27,7 +27,7 @@ Routes:
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -81,6 +81,23 @@ def _deadline_info(deadline_iso: Optional[str]) -> dict:
     if diff.days <= 7:
         return {"text": f"{diff.days}d", "css": "text-warning"}
     return {"text": f"{diff.days}d", "css": "text-muted"}
+
+
+def _eol_info(eol_date: Optional[str]) -> dict:
+    """Return display text and CSS class for an OS end-of-life date string."""
+    if not eol_date:
+        return {"text": "—", "css": "text-muted", "badge": False}
+    today = datetime.now(timezone.utc).date()
+    try:
+        d = date.fromisoformat(eol_date)
+    except ValueError:
+        return {"text": "—", "css": "text-muted", "badge": False}
+    if d < today:
+        return {"text": "EOL", "css": "text-danger fw-bold", "badge": True}
+    days = (d - today).days
+    if days <= 90:
+        return {"text": f"EOL in {days}d", "css": "text-warning", "badge": False}
+    return {"text": str(d), "css": "text-muted", "badge": False}
 
 
 def _cvss_row_css(metric: str, value: str) -> str:
@@ -321,13 +338,16 @@ def asset_create_form(request: Request) -> HTMLResponse:
     """Render the asset registration form."""
     return templates.TemplateResponse(
         "assets_form.html",
-        {"request": request, "error": None, "form_data": {}},
+        {"request": request, "error": None, "form_data": {}, "compliance_options": _COMPLIANCE_OPTIONS},
     )
 
 
 # ---------------------------------------------------------------------------
 # POST /assets -- handle creation, 303-redirect to /assets/{id} on success
 # ---------------------------------------------------------------------------
+
+
+_COMPLIANCE_OPTIONS = ["PCI-DSS", "HIPAA", "SOX", "FedRAMP", "GDPR", "ISO 27001", "CIS"]
 
 
 @router.post("/assets", response_class=HTMLResponse)
@@ -340,8 +360,12 @@ async def asset_create(
     criticality: str = Form(default="medium"),
     owner: Optional[str] = Form(default=None),
     tags: Optional[str] = Form(default=None),
+    os: Optional[str] = Form(default=None),
+    eol_date: Optional[str] = Form(default=None),
+    compliance: Optional[list[str]] = Form(default=None),  # noqa: B008
 ) -> HTMLResponse:
     """Handle asset creation form POST. Redirects to the new asset on success."""
+    compliance_raw: list[str] = compliance or []
     form_data = {
         "hostname": hostname or "",
         "ip": ip or "",
@@ -350,18 +374,31 @@ async def asset_create(
         "criticality": criticality,
         "owner": owner or "",
         "tags": tags or "",
+        "os": os or "",
+        "eol_date": eol_date or "",
+        "compliance": compliance_raw,
     }
 
     hostname_clean = (hostname or "").strip()
     if not hostname_clean:
         return templates.TemplateResponse(
             "assets_form.html",
-            {"request": request, "error": "Hostname is required.", "form_data": form_data},
+            {
+                "request": request,
+                "error": "Hostname is required.",
+                "form_data": form_data,
+                "compliance_options": _COMPLIANCE_OPTIONS,
+            },
         )
     if len(hostname_clean) > 255:
         return templates.TemplateResponse(
             "assets_form.html",
-            {"request": request, "error": "Hostname must be 255 characters or fewer.", "form_data": form_data},
+            {
+                "request": request,
+                "error": "Hostname must be 255 characters or fewer.",
+                "form_data": form_data,
+                "compliance_options": _COMPLIANCE_OPTIONS,
+            },
         )
 
     if environment not in _VALID_ENVIRONMENTS:
@@ -372,6 +409,10 @@ async def asset_create(
         criticality = "medium"
 
     tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    compliance_clean = [c for c in compliance_raw if c in _COMPLIANCE_OPTIONS]
+    eol_clean = (eol_date or "").strip() or None
+    os_clean = (os or "").strip()[:100] or None
+
     asset = Asset(
         hostname=hostname_clean,
         ip=(ip or "").strip() or None,
@@ -380,6 +421,9 @@ async def asset_create(
         criticality=criticality,
         owner=(owner or "").strip() or None,
         tags=tag_list,
+        os=os_clean,
+        eol_date=eol_clean,
+        compliance=compliance_clean,
     )
 
     cmdb: CMDBStore = request.app.state.cmdb
@@ -393,6 +437,7 @@ async def asset_create(
                 "request": request,
                 "error": "Failed to create asset. The hostname may already be registered.",
                 "form_data": form_data,
+                "compliance_options": _COMPLIANCE_OPTIONS,
             },
         )
 
@@ -440,6 +485,7 @@ def asset_detail(request: Request, asset_id: int) -> HTMLResponse:
             "counts": cmdb.get_priority_counts(asset_id),
             "asset_id": asset_id,
             "statuses": _STATUSES,
+            "eol_info": _eol_info(asset.eol_date),
         },
     )
 
@@ -586,6 +632,148 @@ async def update_vuln_status_htmx(
             "statuses": _STATUSES,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /assets/{asset_id}/edit -- pre-populated edit form
+# ---------------------------------------------------------------------------
+
+
+@router.get("/assets/{asset_id}/edit", response_class=HTMLResponse)
+def asset_edit_form(request: Request, asset_id: int) -> HTMLResponse:
+    """Render the asset edit form, pre-populated with current values."""
+    cmdb: CMDBStore = request.app.state.cmdb
+    asset = cmdb.get_asset(asset_id)
+    if asset is None:
+        return HTMLResponse("<h1>Asset not found</h1>", status_code=404)
+    form_data = {
+        "hostname": asset.hostname,
+        "ip": asset.ip or "",
+        "environment": asset.environment,
+        "exposure": asset.exposure,
+        "criticality": asset.criticality,
+        "owner": asset.owner or "",
+        "tags": ", ".join(asset.tags),
+        "os": asset.os or "",
+        "eol_date": asset.eol_date or "",
+        "compliance": asset.compliance,
+    }
+    return templates.TemplateResponse(
+        "asset_edit.html",
+        {
+            "request": request,
+            "asset": asset,
+            "form_data": form_data,
+            "error": None,
+            "compliance_options": _COMPLIANCE_OPTIONS,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /assets/{asset_id} -- handle asset update, 303-redirect to detail
+# ---------------------------------------------------------------------------
+
+
+@router.post("/assets/{asset_id}", response_class=HTMLResponse)
+async def asset_update(
+    request: Request,
+    asset_id: int,
+    hostname: Optional[str] = Form(default=None),
+    ip: Optional[str] = Form(default=None),
+    environment: str = Form(default="production"),
+    exposure: str = Form(default="internal"),
+    criticality: str = Form(default="medium"),
+    owner: Optional[str] = Form(default=None),
+    tags: Optional[str] = Form(default=None),
+    os: Optional[str] = Form(default=None),
+    eol_date: Optional[str] = Form(default=None),
+    compliance: Optional[list[str]] = Form(default=None),  # noqa: B008
+) -> HTMLResponse:
+    """Handle asset edit form POST. Redirects to /assets/{id} on success."""
+    compliance_raw: list[str] = compliance or []
+    cmdb: CMDBStore = request.app.state.cmdb
+    asset = cmdb.get_asset(asset_id)
+    if asset is None:
+        return HTMLResponse("<h1>Asset not found</h1>", status_code=404)
+
+    form_data = {
+        "hostname": hostname or "",
+        "ip": ip or "",
+        "environment": environment,
+        "exposure": exposure,
+        "criticality": criticality,
+        "owner": owner or "",
+        "tags": tags or "",
+        "os": os or "",
+        "eol_date": eol_date or "",
+        "compliance": compliance_raw,
+    }
+
+    hostname_clean = (hostname or "").strip()
+    if not hostname_clean:
+        return templates.TemplateResponse(
+            "asset_edit.html",
+            {
+                "request": request,
+                "asset": asset,
+                "form_data": form_data,
+                "error": "Hostname is required.",
+                "compliance_options": _COMPLIANCE_OPTIONS,
+            },
+        )
+    if len(hostname_clean) > 255:
+        return templates.TemplateResponse(
+            "asset_edit.html",
+            {
+                "request": request,
+                "asset": asset,
+                "form_data": form_data,
+                "error": "Hostname must be 255 characters or fewer.",
+                "compliance_options": _COMPLIANCE_OPTIONS,
+            },
+        )
+
+    if environment not in _VALID_ENVIRONMENTS:
+        environment = "production"
+    if exposure not in _VALID_EXPOSURES:
+        exposure = "internal"
+    if criticality not in _VALID_CRITICALITIES:
+        criticality = "medium"
+
+    tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+    compliance_clean = [c for c in compliance_raw if c in _COMPLIANCE_OPTIONS]
+    eol_clean = (eol_date or "").strip() or None
+    os_clean = (os or "").strip()[:100] or None
+
+    try:
+        cmdb.update_asset(
+            asset_id,
+            hostname=hostname_clean,
+            ip=(ip or "").strip() or None,
+            environment=environment,
+            exposure=exposure,
+            criticality=criticality,
+            owner=(owner or "").strip() or None,
+            tags=tag_list,
+            os=os_clean,
+            eol_date=eol_clean,
+            compliance=compliance_clean,
+        )
+    except Exception as exc:
+        logger.debug("Asset update failed: %s", exc, exc_info=True)
+        return templates.TemplateResponse(
+            "asset_edit.html",
+            {
+                "request": request,
+                "asset": asset,
+                "form_data": form_data,
+                "error": "Failed to update asset.",
+                "compliance_options": _COMPLIANCE_OPTIONS,
+            },
+        )
+
+    return RedirectResponse(f"/assets/{asset_id}", status_code=303)
 
 
 # ---------------------------------------------------------------------------

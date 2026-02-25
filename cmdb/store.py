@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, text
 from sqlalchemy.engine import Engine
 
 from cmdb.models import Asset, AssetVulnerability, RemediationRecord
@@ -59,6 +59,9 @@ _assets = Table(
     Column("owner", String(255)),
     Column("tags", Text),  # JSON array serialized as text
     Column("created_at", String(32), nullable=False),
+    Column("os", String(100)),
+    Column("eol_date", String(10)),  # YYYY-MM-DD
+    Column("compliance", Text),  # JSON array, like tags
 )
 
 _asset_vulns = Table(
@@ -124,6 +127,34 @@ def apply_criticality_modifier(priority: str, criticality: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Migration
+# ---------------------------------------------------------------------------
+
+
+def _migrate_assets_table(conn) -> None:
+    """Add new columns to an existing assets table without dropping data.
+
+    metadata.create_all() only creates missing tables -- it does not add
+    columns to existing tables. This function fills that gap by inspecting
+    PRAGMA table_info and issuing ALTER TABLE for any missing columns.
+
+    Column names are hardcoded constants (not user input), so string
+    interpolation in the ALTER TABLE statement is safe and unavoidable:
+    SQLite does not support parameter binding for column names.
+    """
+    existing = {row[1] for row in conn.execute(text("PRAGMA table_info(assets)"))}
+    additions = [
+        ("os", "TEXT"),
+        ("eol_date", "TEXT"),
+        ("compliance", "TEXT"),
+    ]
+    for col, typ in additions:
+        if col not in existing:
+            conn.execute(text(f"ALTER TABLE assets ADD COLUMN {col} {typ}"))  # nosemgrep
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
 # Repository
 # ---------------------------------------------------------------------------
 
@@ -138,6 +169,8 @@ class CMDBStore:
             connect_args["check_same_thread"] = False
         self.engine: Engine = create_engine(db_url, connect_args=connect_args)
         metadata.create_all(self.engine)
+        with self.engine.connect() as conn:
+            _migrate_assets_table(conn)
 
     # ------------------------------------------------------------------
     # Assets
@@ -156,10 +189,31 @@ class CMDBStore:
                     owner=asset.owner,
                     tags=json.dumps(asset.tags),
                     created_at=_now_iso(),
+                    os=asset.os,
+                    eol_date=asset.eol_date,
+                    compliance=json.dumps(asset.compliance),
                 )
             )
             conn.commit()
             return result.inserted_primary_key[0]
+
+    def update_asset(self, asset_id: int, **fields) -> bool:
+        """Update mutable fields on an existing asset.
+
+        Accepts any subset of: hostname, ip, environment, exposure, criticality,
+        owner, tags, os, eol_date, compliance. Tags and compliance must be
+        passed as list[str]; this method serializes them to JSON before writing.
+
+        Returns True if a row was updated, False if asset_id was not found.
+        """
+        if "tags" in fields:
+            fields["tags"] = json.dumps(fields["tags"])
+        if "compliance" in fields:
+            fields["compliance"] = json.dumps(fields["compliance"])
+        with self.engine.connect() as conn:
+            result = conn.execute(_assets.update().where(_assets.c.id == asset_id).values(**fields))
+            conn.commit()
+        return result.rowcount > 0
 
     def get_asset(self, asset_id: int) -> Optional[Asset]:
         """Fetch a single asset by ID. Returns None if not found."""
@@ -323,6 +377,7 @@ class CMDBStore:
 
 def _row_to_asset(row) -> Asset:
     tags: list[str] = json.loads(row.tags) if row.tags else []
+    compliance: list[str] = json.loads(row.compliance) if getattr(row, "compliance", None) else []
     return Asset(
         id=row.id,
         hostname=row.hostname,
@@ -333,6 +388,9 @@ def _row_to_asset(row) -> Asset:
         owner=row.owner,
         tags=tags,
         created_at=row.created_at,
+        os=getattr(row, "os", None),
+        eol_date=getattr(row, "eol_date", None),
+        compliance=compliance,
     )
 
 

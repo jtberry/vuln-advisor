@@ -32,6 +32,9 @@ class Asset:
     owner: Optional[str] = None
     tags: list[str] = field(default_factory=list)
     created_at: str = ""  # ISO 8601, set by store on insert
+    os: Optional[str] = None  # free text, e.g. "Ubuntu 22.04 LTS"
+    eol_date: Optional[str] = None  # ISO date string "YYYY-MM-DD" or None
+    compliance: list[str] = field(default_factory=list)  # e.g. ["PCI-DSS", "HIPAA"]
 
 
 @dataclass

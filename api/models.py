@@ -233,6 +233,9 @@ class AssetCreate(BaseModel):
     criticality: CriticalityEnum = CriticalityEnum.medium
     owner: Optional[str] = Field(default=None, max_length=255)
     tags: list[str] = Field(default_factory=list, max_length=20)
+    os: Optional[str] = Field(default=None, max_length=100)
+    eol_date: Optional[str] = Field(default=None)
+    compliance: list[str] = Field(default_factory=list)
 
 
 class AssetVulnRow(BaseModel):
@@ -267,6 +270,9 @@ class AssetResponse(BaseModel):
     created_at: str
     vuln_counts: dict[str, int]
     vulnerabilities: list[AssetVulnRow] = Field(default_factory=list)
+    os: Optional[str] = None
+    eol_date: Optional[str] = None
+    compliance: list[str] = Field(default_factory=list)
 
 
 class AssetSummaryRow(BaseModel):

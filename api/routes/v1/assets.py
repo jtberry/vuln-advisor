@@ -72,6 +72,9 @@ def create_asset(
         criticality=body.criticality.value,
         owner=body.owner,
         tags=body.tags,
+        os=body.os,
+        eol_date=body.eol_date,
+        compliance=body.compliance,
     )
     asset_id = cmdb.create_asset(asset)
     created = cmdb.get_asset(asset_id)
@@ -88,6 +91,9 @@ def create_asset(
         created_at=created.created_at,
         vuln_counts={"P1": 0, "P2": 0, "P3": 0, "P4": 0},
         vulnerabilities=[],
+        os=created.os,
+        eol_date=created.eol_date,
+        compliance=created.compliance,
     )
 
 
@@ -311,6 +317,9 @@ def get_asset(request: Request, asset_id: int) -> AssetResponse:
         created_at=asset.created_at,
         vuln_counts=counts,
         vulnerabilities=vuln_rows,
+        os=asset.os,
+        eol_date=asset.eol_date,
+        compliance=asset.compliance,
     )
 
 
