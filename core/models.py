@@ -1,6 +1,14 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+# ---------------------------------------------------------------------------
+# Domain constants
+# ---------------------------------------------------------------------------
+
+# Canonical CVE ID format. A domain rule -- not an API contract.
+# All layers (api/, web/, CLI) that need to validate CVE IDs import from here.
+CVE_PATTERN = r"^CVE-\d{4}-\d{4,}$"
+
 
 @dataclass
 class CVSSDetails:

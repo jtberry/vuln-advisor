@@ -72,7 +72,7 @@ run-file: ## Triage CVEs from a file  (usage: make run-file FILE=cves.txt)
 	$(PYTHON) main.py --file $(FILE)
 
 run-api: ## Start the API server  (walk phase)
-	uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+	uvicorn asgi:app --reload --host 0.0.0.0 --port 8000
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 
