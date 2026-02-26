@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Phase: 3 of 6 (Dashboard & Charts) -- IN PROGRESS
-Plan: 1 of 3 in current phase -- COMPLETE
-Status: Phase 3 Plan 01 complete
-Last activity: 2026-02-26 - Plan 03-01 complete (SLA query backend, configurable SLA targets, overdue/approaching vulns)
+Plan: 2 of 3 in current phase -- COMPLETE
+Status: Phase 3 Plan 02 complete
+Last activity: 2026-02-26 - Plan 03-02 complete (Chart.js doughnut, KEV stat card, threat intel highlights, overdue SLA list)
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Performance Metrics
 
@@ -42,7 +42,7 @@ Progress: [██████░░░░] 60%
 |-------|-------|-------|----------|
 | 01-auth-foundation | 8 | 58 min | 7.3 min |
 | 02-data-layer | 2 | 7 min | 3.5 min |
-| 03-dashboard-charts | 1 | 4 min | 4 min |
+| 03-dashboard-charts | 2 | 34 min | 17 min |
 
 **Recent Trend:**
 - Last plans: 01-06 (15 min), 01-07 (8 min), 01-08 (8 min), 02-01 (3 min), 02-02 (4 min), 03-03 (4 min)
@@ -51,6 +51,7 @@ Progress: [██████░░░░] 60%
 *Updated after each plan completion*
 | Phase 03-dashboard-charts P00 | 7 | 3 tasks | 3 files |
 | Phase 03-dashboard-charts P01 | 12 | 2 tasks | 4 files |
+| Phase 03-dashboard-charts P02 | 22 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,10 @@ Recent decisions affecting current work:
 - [Phase 03-dashboard-charts]: Caller-provided deadline wins over auto-computed in create_asset_vuln: allows importing vulns with existing deadlines from scanners
 - [Phase 03-dashboard-charts]: 200-item cap with P1/P2 filter in get_open_vuln_cve_ids: dashboard threat intel calls process_cve() per CVE; cap limits latency
 - [Phase 03-dashboard-charts]: SLA config in app_settings not a new table: follows existing single-row settings pattern; four columns added via _ensure_sla_columns()
+- [03-02]: tojson filter for all server-side data injected into script blocks: prevents XSS; escapes <, >, & in JSON output
+- [03-02]: Chart.js loaded in dashboard-scoped block scripts not layout.html: avoids loading chart library on every page
+- [03-02]: Client-side pagination for threat intel and SLA tables: data already loaded server-side; simpler than HTMX round-trips for a solo-analyst tool
+- [03-02]: patch _require_auth not try_get_current_user in tests: narrower mock scope; tests the route logic not the auth gate
 
 ### Pending Todos
 
@@ -113,5 +118,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 03-dashboard-charts/03-01-PLAN.md (SLA query backend, configurable SLA targets, overdue/approaching vulns)
+Stopped at: Completed 03-dashboard-charts/03-02-PLAN.md (Chart.js doughnut, KEV stat card, threat intel highlights, overdue SLA list)
 Resume file: None

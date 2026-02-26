@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Auth & Foundation** - Harden auth UX end-to-end and centralize config so every downstream feature has a stable, trustworthy base (completed 2026-02-26)
 - [x] **Phase 2: Data Layer** - Fix N+1 queries and enable WAL mode, then wire up the PATCH endpoint and audit status workflow backend (completed 2026-02-26)
-- [ ] **Phase 3: Dashboard & Charts** - Surface risk data visually and connect status workflow to the UI
+- [x] **Phase 3: Dashboard & Charts** - Surface risk data visually and connect status workflow to the UI (completed 2026-02-26)
 - [ ] **Phase 4: UI Polish** - Make the tool feel complete and usable as a daily landing page
 - [ ] **Phase 5: Test Coverage** - Formalize test coverage across all routes, stores, auth, and ingest
 - [ ] **Phase 6: Containerization** - Dockerfile, docker-compose, and reverse proxy for deployment
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Auth & Foundation | 8/8 | Complete   | 2026-02-26 |
 | 2. Data Layer | 2/2 | Complete   | 2026-02-26 |
-| 3. Dashboard & Charts | 3/4 | In Progress|  |
+| 3. Dashboard & Charts | 4/4 | Complete   | 2026-02-26 |
 | 4. UI Polish | 0/TBD | Not started | - |
 | 5. Test Coverage | 0/TBD | Not started | - |
 | 6. Containerization | 0/TBD | Not started | - |

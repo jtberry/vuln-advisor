@@ -168,8 +168,11 @@ class TestOverdueSort:
             # Each item should have days_until_due (or similar) showing the ordering
             # Alternatively check that the first item has the smallest days until deadline
             # The field name will be determined by 03-01 implementation
-            # Accept either days_until_due or days_overdue (negative = days until)
-            field = "days_until_due" if "days_until_due" in approaching[0] else "days_overdue"
+            # Accept days_remaining, days_until_due, or days_overdue (negative = days until)
+            field = next(
+                (k for k in ("days_remaining", "days_until_due", "days_overdue") if k in approaching[0]),
+                "days_remaining",
+            )
             values = [item[field] for item in approaching]
             assert values == sorted(values), f"Expected ascending order for approaching, got {values}"
         finally:

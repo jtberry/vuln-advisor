@@ -618,13 +618,13 @@ class CMDBStore:
                         "hostname": row.hostname,
                         "cve_id": row.cve_id,
                         "effective_priority": row.effective_priority,
-                        "days_until_due": days_until,
+                        "days_remaining": days_until,
                         "deadline": row.deadline,
                     }
                 )
 
         overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
-        approaching.sort(key=lambda x: x["days_until_due"])
+        approaching.sort(key=lambda x: x["days_remaining"])
 
         return {"overdue": overdue, "approaching": approaching}
 
