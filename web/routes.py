@@ -420,6 +420,7 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
             "threat_intel_items": threat_intel_items,
             "overdue_data": overdue_data,
             "kev_count": kev_count,
+            "getting_started": total_assets == 0,
         },
     )
 

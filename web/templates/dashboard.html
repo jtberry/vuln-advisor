@@ -6,8 +6,8 @@
 {# ── Page header ─────────────────────────────────────────────────── #}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
-    <h5 class="fw-bold mb-0" style="color: #e6edf3">Risk Dashboard</h5>
-    <div class="text-muted" style="font-size: 0.82rem">Asset-aware vulnerability triage</div>
+    <h5 class="fw-bold mb-0" style="color: #e6edf3">Risk Overview</h5>
+    <div class="text-muted" style="font-size: 0.82rem">Vulnerability triage and remediation status</div>
   </div>
   <div class="d-flex gap-2">
     <a href="/assets/new"
@@ -20,6 +20,27 @@
     </a>
   </div>
 </div>
+
+{% if getting_started %}
+
+{# ── Getting-started view (no assets registered yet) ─────────────── #}
+<div class="row justify-content-center mt-5">
+  <div class="col-lg-5">
+    <div class="card text-center p-4">
+      <h5 class="fw-bold mb-2" style="color: #e6edf3">Welcome to VulnAdvisor</h5>
+      <p class="text-muted mb-4" style="font-size: 0.88rem">
+        Register your first asset to start tracking vulnerabilities.
+      </p>
+      <a href="/assets/new" class="btn btn-primary">Register First Asset</a>
+      <div class="mt-3" style="font-size: 0.82rem">
+        <span class="text-muted">Have a scanner file?</span>
+        <a href="/ingest" style="color: #58a6ff">Import a scan instead</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
 
 {# ── KPI cards ───────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
@@ -90,6 +111,106 @@
 
 </div>
 
+{# ── Overdue SLA ──────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">SLA Status</span>
+    <div class="text-muted" style="font-size: 0.75rem">
+      {{ overdue_data.overdue | length }} overdue
+      {% if overdue_data.approaching | length > 0 %}
+      &middot; {{ overdue_data.approaching | length }} approaching
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {% set all_sla_items = overdue_data.overdue + overdue_data.approaching %}
+    {% if all_sla_items %}
+    <table class="table table-hover mb-0" id="slaTable">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem">Asset</th>
+          <th>CVE ID</th>
+          <th>Severity</th>
+          <th>SLA Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# Overdue items first (red) #}
+        {% for item in overdue_data.overdue %}
+        <tr class="sla-row" style="cursor: pointer" onclick="location.href='/assets/{{ item.asset_id }}'">
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ item.asset_id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.88rem"
+               onclick="event.stopPropagation()">
+              {{ item.hostname }}
+            </a>
+          </td>
+          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
+          <td>
+            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
+              {{ item.effective_priority }}
+            </span>
+          </td>
+          <td class="text-danger fw-semibold" style="font-size: 0.88rem">
+            {{ item.days_overdue }} day{% if item.days_overdue != 1 %}s{% endif %} overdue
+          </td>
+        </tr>
+        {% endfor %}
+        {# Approaching items (amber) #}
+        {% for item in overdue_data.approaching %}
+        <tr class="sla-row" style="cursor: pointer" onclick="location.href='/assets/{{ item.asset_id }}'">
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ item.asset_id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.88rem"
+               onclick="event.stopPropagation()">
+              {{ item.hostname }}
+            </a>
+          </td>
+          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
+          <td>
+            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
+              {{ item.effective_priority }}
+            </span>
+          </td>
+          <td class="text-warning" style="font-size: 0.88rem">
+            due in {{ item.days_remaining }} day{% if item.days_remaining != 1 %}s{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {# Client-side pagination controls for SLA table #}
+    <div id="slaPager" class="d-flex justify-content-between align-items-center py-2 px-3"
+         style="background-color: #161b22; border-top: 1px solid #21262d; display: none !important">
+      <span class="text-muted" id="slaPageInfo" style="font-size: 0.78rem"></span>
+      <nav>
+        <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
+          <li class="page-item" id="slaPrevLi">
+            <button class="page-link" id="slaPrev"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &laquo;
+            </button>
+          </li>
+          <li class="page-item" id="slaNextLi">
+            <button class="page-link" id="slaNext"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &raquo;
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
+    {% else %}
+    <div class="text-center py-4 d-flex align-items-center justify-content-center gap-2">
+      <span style="color: #3fb950; font-size: 1.1rem">&#10003;</span>
+      <span class="text-muted" style="font-size: 0.88rem">No overdue SLAs - all vulnerabilities are within target</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 {# ── Severity chart + Asset risk table ───────────────────────────── #}
 <div class="row g-3 mb-4">
 
@@ -103,7 +224,10 @@
         {% if total_open > 0 %}
         <canvas id="severityChart"></canvas>
         {% else %}
-        <div class="text-center text-muted" style="font-size: 0.88rem">No open vulnerabilities</div>
+        <div class="text-center d-flex align-items-center justify-content-center gap-2">
+          <span style="color: #3fb950; font-size: 1.1rem">&#10003;</span>
+          <span class="text-muted" style="font-size: 0.88rem">No open vulnerabilities</span>
+        </div>
         {% endif %}
       </div>
     </div>
@@ -269,11 +393,12 @@
       </thead>
       <tbody>
         {% for item in threat_intel_items %}
-        <tr class="threat-intel-row">
+        <tr class="threat-intel-row" style="cursor: pointer" onclick="location.href='/assets/{{ item.asset_id }}'">
           <td style="padding-left: 1rem">
-            <a href="/assets/{{ item.asset_id }}"
+            <a href="/cve/{{ item.cve_id }}"
                class="text-decoration-none font-mono fw-semibold"
-               style="color: #58a6ff; font-size: 0.88rem">
+               style="color: #58a6ff; font-size: 0.88rem"
+               onclick="event.stopPropagation()">
               {{ item.cve_id }}
             </a>
           </td>
@@ -326,109 +451,15 @@
       </nav>
     </div>
     {% else %}
-    <div class="text-center py-4 text-muted" style="font-size: 0.88rem">
-      No KEV or high-EPSS items on tracked assets
+    <div class="text-center py-4 d-flex align-items-center justify-content-center gap-2">
+      <span style="color: #3fb950; font-size: 1.1rem">&#10003;</span>
+      <span class="text-muted" style="font-size: 0.88rem">No KEV entries or high-EPSS vulnerabilities on tracked assets</span>
     </div>
     {% endif %}
   </div>
 </div>
 
-{# ── Overdue SLA ──────────────────────────────────────────────────── #}
-<div class="card mb-4">
-  <div class="card-header py-2 px-3">
-    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">SLA Status</span>
-    <div class="text-muted" style="font-size: 0.75rem">
-      {{ overdue_data.overdue | length }} overdue
-      {% if overdue_data.approaching | length > 0 %}
-      &middot; {{ overdue_data.approaching | length }} approaching
-      {% endif %}
-    </div>
-  </div>
-  <div class="card-body p-0">
-    {% set all_sla_items = overdue_data.overdue + overdue_data.approaching %}
-    {% if all_sla_items %}
-    <table class="table table-hover mb-0" id="slaTable">
-      <thead>
-        <tr>
-          <th style="padding-left: 1rem">Asset</th>
-          <th>CVE ID</th>
-          <th>Severity</th>
-          <th>SLA Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {# Overdue items first (red) #}
-        {% for item in overdue_data.overdue %}
-        <tr class="sla-row">
-          <td style="padding-left: 1rem">
-            <a href="/assets/{{ item.asset_id }}"
-               class="text-decoration-none fw-semibold font-mono"
-               style="color: #58a6ff; font-size: 0.88rem">
-              {{ item.hostname }}
-            </a>
-          </td>
-          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
-          <td>
-            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
-              {{ item.effective_priority }}
-            </span>
-          </td>
-          <td class="text-danger fw-semibold" style="font-size: 0.88rem">
-            {{ item.days_overdue }} day{% if item.days_overdue != 1 %}s{% endif %} overdue
-          </td>
-        </tr>
-        {% endfor %}
-        {# Approaching items (amber) #}
-        {% for item in overdue_data.approaching %}
-        <tr class="sla-row">
-          <td style="padding-left: 1rem">
-            <a href="/assets/{{ item.asset_id }}"
-               class="text-decoration-none fw-semibold font-mono"
-               style="color: #58a6ff; font-size: 0.88rem">
-              {{ item.hostname }}
-            </a>
-          </td>
-          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
-          <td>
-            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
-              {{ item.effective_priority }}
-            </span>
-          </td>
-          <td class="text-warning" style="font-size: 0.88rem">
-            due in {{ item.days_remaining }} day{% if item.days_remaining != 1 %}s{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {# Client-side pagination controls for SLA table #}
-    <div id="slaPager" class="d-flex justify-content-between align-items-center py-2 px-3"
-         style="background-color: #161b22; border-top: 1px solid #21262d; display: none !important">
-      <span class="text-muted" id="slaPageInfo" style="font-size: 0.78rem"></span>
-      <nav>
-        <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
-          <li class="page-item" id="slaPrevLi">
-            <button class="page-link" id="slaPrev"
-                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
-              &laquo;
-            </button>
-          </li>
-          <li class="page-item" id="slaNextLi">
-            <button class="page-link" id="slaNext"
-                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
-              &raquo;
-            </button>
-          </li>
-        </ul>
-      </nav>
-    </div>
-    {% else %}
-    <div class="text-center py-4 text-muted" style="font-size: 0.88rem">
-      All vulnerabilities are within SLA targets
-    </div>
-    {% endif %}
-  </div>
-</div>
+{% endif %}
 
 {% endblock %}
 
