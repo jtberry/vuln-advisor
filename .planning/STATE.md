@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T22:02:00.901Z"
+last_updated: "2026-02-26T22:20:15.321Z"
 progress:
   total_phases: 3
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-26)
 
 **Core value:** A solo security analyst can open VulnAdvisor daily, see what needs attention, triage CVEs, track asset risk, and update status - all in one tool with no paid subscriptions.
-**Current focus:** Phase 3 - Dashboard & Charts
+**Current focus:** Phase 4 - UI Polish
 
 ## Current Position
 
-Phase: 3 of 6 (Dashboard & Charts) -- IN PROGRESS
-Plan: 2 of 3 in current phase -- COMPLETE
-Status: Phase 3 Plan 02 complete
-Last activity: 2026-02-26 - Plan 03-02 complete (Chart.js doughnut, KEV stat card, threat intel highlights, overdue SLA list)
+Phase: 4 of 6 (UI Polish) -- IN PROGRESS
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 4 Plan 02 complete
+Last activity: 2026-02-26 - Plan 04-02 complete (getting-started view, section reorder, all-clear widgets, clickable rows, empty state upgrades)
 
-Progress: [███████░░░] 70%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [███████░░░] 70%
 | Phase 03-dashboard-charts P00 | 7 | 3 tasks | 3 files |
 | Phase 03-dashboard-charts P01 | 12 | 2 tasks | 4 files |
 | Phase 03-dashboard-charts P02 | 22 | 2 tasks | 4 files |
+| Phase 04-ui-polish P01 | 2 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,11 @@ Recent decisions affecting current work:
 - [03-02]: Chart.js loaded in dashboard-scoped block scripts not layout.html: avoids loading chart library on every page
 - [03-02]: Client-side pagination for threat intel and SLA tables: data already loaded server-side; simpler than HTMX round-trips for a solo-analyst tool
 - [03-02]: patch _require_auth not try_get_current_user in tests: narrower mock scope; tests the route logic not the auth gate
+- [04-01]: CVE Search placed outside {% if current_user %} guard so unauthenticated users retain access; all other nav items remain authenticated-only
+- [04-01]: Bootstrap breadcrumb custom divider set via CSS variable --bs-breadcrumb-divider: '›' inline on the <ol> element -- avoids global CSS change
+- [04-02]: getting_started branch wraps entire dashboard body below page header -- KPI zeros never appear on fresh install; single flag, not per-widget conditionals
+- [04-02]: CVE ID links in Threat Intel go to /cve/CVE-ID; row click goes to /assets/ID -- two distinct navigation intents served by two click targets
+- [04-02]: event.stopPropagation() on inline <a> tags inside clickable <tr> prevents row handler from firing when link is clicked directly
 
 ### Pending Todos
 
@@ -118,5 +124,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 03-dashboard-charts/03-02-PLAN.md (Chart.js doughnut, KEV stat card, threat intel highlights, overdue SLA list)
+Stopped at: Completed 04-ui-polish/04-02-PLAN.md (getting-started view, section reorder, all-clear widgets, clickable rows, empty state upgrades)
 Resume file: None

@@ -33,16 +33,16 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 
 ### Dashboard & Charts
 
-- [ ] **DASH-01**: Severity breakdown chart shows open vulns by priority (P1/P2/P3/P4) using Chart.js
-- [ ] **DASH-02**: KEV highlights widget surfaces newly added KEV entries affecting tracked assets
-- [ ] **DASH-03**: High-EPSS highlights widget surfaces vulns with EPSS > 0.5 on tracked assets
-- [ ] **DASH-04**: Overdue SLA items are visually prominent on dashboard (not just a count)
+- [x] **DASH-01**: Severity breakdown chart shows open vulns by priority (P1/P2/P3/P4) using Chart.js
+- [x] **DASH-02**: KEV highlights widget surfaces newly added KEV entries affecting tracked assets
+- [x] **DASH-03**: High-EPSS highlights widget surfaces vulns with EPSS > 0.5 on tracked assets
+- [x] **DASH-04**: Overdue SLA items are visually prominent on dashboard (not just a count)
 
 ### UI Polish
 
-- [ ] **UIPL-01**: Navigation is consistent and usable across all pages
-- [ ] **UIPL-02**: Empty states guide user to next action (first asset load, first ingest, etc.)
-- [ ] **UIPL-03**: Dashboard is a usable daily landing page for a solo analyst
+- [x] **UIPL-01**: Navigation is consistent and usable across all pages
+- [x] **UIPL-02**: Empty states guide user to next action (first asset load, first ingest, etc.)
+- [x] **UIPL-03**: Dashboard is a usable daily landing page for a solo analyst
 
 ### Deployment
 
@@ -106,15 +106,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEBT-03 | Phase 2 | Complete |
 | STAT-01 | Phase 2 | Complete |
 | STAT-02 | Phase 2 | Complete |
-| DASH-01 | Phase 3 | Pending |
-| DASH-02 | Phase 3 | Pending |
-| DASH-03 | Phase 3 | Pending |
-| DASH-04 | Phase 3 | Pending |
+| DASH-01 | Phase 3 | Complete |
+| DASH-02 | Phase 3 | Complete |
+| DASH-03 | Phase 3 | Complete |
+| DASH-04 | Phase 3 | Complete |
 | STAT-03 | Phase 3 | Complete |
 | STAT-04 | Phase 3 | Complete |
-| UIPL-01 | Phase 4 | Pending |
-| UIPL-02 | Phase 4 | Pending |
-| UIPL-03 | Phase 4 | Pending |
+| UIPL-01 | Phase 4 | Complete |
+| UIPL-02 | Phase 4 | Complete |
+| UIPL-03 | Phase 4 | Complete |
 | DEBT-04 | Phase 5 | Pending |
 | DEPL-01 | Phase 6 | Pending |
 

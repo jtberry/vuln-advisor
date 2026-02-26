@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Auth & Foundation** - Harden auth UX end-to-end and centralize config so every downstream feature has a stable, trustworthy base (completed 2026-02-26)
 - [x] **Phase 2: Data Layer** - Fix N+1 queries and enable WAL mode, then wire up the PATCH endpoint and audit status workflow backend (completed 2026-02-26)
 - [x] **Phase 3: Dashboard & Charts** - Surface risk data visually and connect status workflow to the UI (completed 2026-02-26)
-- [ ] **Phase 4: UI Polish** - Make the tool feel complete and usable as a daily landing page
+- [x] **Phase 4: UI Polish** - Make the tool feel complete and usable as a daily landing page (completed 2026-02-26)
 - [ ] **Phase 5: Test Coverage** - Formalize test coverage across all routes, stores, auth, and ingest
 - [ ] **Phase 6: Containerization** - Dockerfile, docker-compose, and reverse proxy for deployment
 
@@ -83,7 +83,11 @@ Plans:
   1. Navigation is consistent across all pages - same structure, active state indicators, and session display on every authenticated page
   2. Every major empty state (no assets loaded, no vulns ingested, no KEV matches) shows a clear next-action prompt rather than a blank or error
   3. A solo analyst can open the dashboard as their first action each day and immediately see what needs attention without navigating elsewhere
-**Plans**: TBD
+**Plans**: 2 total (04-01 through 04-02)
+
+Plans:
+- [x] 04-01-PLAN.md -- Nav rename/reorder, page headers, breadcrumbs on detail pages
+- [ ] 04-02-PLAN.md -- Dashboard restructure, getting-started view, empty states, clickable rows
 
 ### Phase 5: Test Coverage
 **Goal**: Routes, stores, auth flow, and ingest parsers have automated test coverage; regressions on critical safety features are caught before merge
@@ -117,6 +121,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Auth & Foundation | 8/8 | Complete   | 2026-02-26 |
 | 2. Data Layer | 2/2 | Complete   | 2026-02-26 |
 | 3. Dashboard & Charts | 4/4 | Complete   | 2026-02-26 |
-| 4. UI Polish | 0/TBD | Not started | - |
+| 4. UI Polish | 2/2 | Complete   | 2026-02-26 |
 | 5. Test Coverage | 0/TBD | Not started | - |
 | 6. Containerization | 0/TBD | Not started | - |
