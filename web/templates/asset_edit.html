@@ -3,13 +3,24 @@
 
 {% block content %}
 
-<div class="mb-3">
-  <a href="/assets/{{ asset.id }}" class="text-muted text-decoration-none" style="font-size: 0.82rem">
-    &larr; {{ asset.hostname }}
-  </a>
-</div>
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0" style="font-size: 0.82rem; --bs-breadcrumb-divider: '›'">
+    <li class="breadcrumb-item">
+      <a href="/assets" style="color: #58a6ff; text-decoration: none">Assets</a>
+    </li>
+    <li class="breadcrumb-item">
+      <a href="/assets/{{ asset.id }}" style="color: #58a6ff; text-decoration: none">{{ asset.hostname }}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page" style="color: #8b949e">
+      Edit
+    </li>
+  </ol>
+</nav>
 
-<h5 class="fw-bold mb-4" style="color: #e6edf3">Edit Asset</h5>
+<div class="mb-4">
+  <h5 class="fw-bold mb-0" style="color: #e6edf3">Edit Asset</h5>
+  <div class="text-muted" style="font-size: 0.82rem">Update asset properties</div>
+</div>
 
 <div class="row g-4">
 

@@ -3,12 +3,17 @@
 
 {% block content %}
 
-{# ── Back link ────────────────────────────────────────────────────── #}
-<div class="mb-3">
-  <a href="/cve" class="text-muted text-decoration-none" style="font-size: 0.82rem">
-    &larr; CVE Research
-  </a>
-</div>
+{# ── Breadcrumb ────────────────────────────────────────────────────── #}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0" style="font-size: 0.82rem; --bs-breadcrumb-divider: '›'">
+    <li class="breadcrumb-item">
+      <a href="/cve" style="color: #58a6ff; text-decoration: none">CVE Search</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page" style="color: #8b949e">
+      {{ cve_id }}
+    </li>
+  </ol>
+</nav>
 
 {% if not enriched %}
 {# ── Not found ────────────────────────────────────────────────────── #}

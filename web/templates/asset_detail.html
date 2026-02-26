@@ -3,12 +3,17 @@
 
 {% block content %}
 
-{# ── Back + header ───────────────────────────────────────────────── #}
-<div class="mb-3">
-  <a href="/" class="text-muted text-decoration-none" style="font-size: 0.82rem">
-    &larr; Dashboard
-  </a>
-</div>
+{# ── Breadcrumb ───────────────────────────────────────────────────── #}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb mb-0" style="font-size: 0.82rem; --bs-breadcrumb-divider: '›'">
+    <li class="breadcrumb-item">
+      <a href="/assets" style="color: #58a6ff; text-decoration: none">Assets</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page" style="color: #8b949e">
+      {{ asset.hostname }}
+    </li>
+  </ol>
+</nav>
 
 {# ── Asset header card ───────────────────────────────────────────── #}
 <div class="card mb-4">
