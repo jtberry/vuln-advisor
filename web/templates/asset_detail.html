@@ -204,9 +204,15 @@
 
     {% else %}
     <div class="text-center py-5">
-      <div class="text-muted mb-2">No vulnerabilities linked to this asset.</div>
-      <div style="font-size: 0.82rem; color: #484f58">
-        Use the <strong>Add CVEs</strong> form above to assign CVE IDs.
+      <div class="fw-semibold mb-2" style="color: #8b949e">No vulnerabilities linked yet</div>
+      <div class="d-flex justify-content-center gap-2 mt-3">
+        <button class="btn btn-sm btn-outline-primary" style="font-size: 0.82rem"
+                onclick="document.getElementById('cve_ids_raw').focus()">
+          Add CVE IDs manually
+        </button>
+        <a href="/ingest" class="btn btn-sm btn-outline-secondary" style="font-size: 0.82rem">
+          Import scanner file
+        </a>
       </div>
     </div>
     {% endif %}

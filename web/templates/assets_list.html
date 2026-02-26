@@ -81,10 +81,16 @@
 {# ── Empty state ──────────────────────────────────────────────────── #}
 <div class="card">
   <div class="card-body text-center py-5">
-    <div class="text-muted mb-2">No assets registered yet.</div>
-    <div style="font-size: 0.82rem; color: #484f58">
-      <a href="/assets/new" class="text-decoration-none" style="color: #58a6ff">Register your first asset</a>
-      to start tracking vulnerabilities.
+    <div class="fw-semibold mb-2" style="color: #8b949e">No assets registered yet</div>
+    <div class="text-muted mb-3" style="font-size: 0.82rem">
+      Register your first infrastructure asset to start tracking vulnerabilities.
+    </div>
+    <a href="/assets/new" class="btn btn-sm btn-primary" style="font-size: 0.82rem">
+      Register First Asset
+    </a>
+    <div class="mt-3" style="font-size: 0.82rem">
+      <span class="text-muted">Have a scanner file?</span>
+      <a href="/ingest" style="color: #58a6ff">Import a scan instead</a>
     </div>
   </div>
 </div>
