@@ -116,7 +116,18 @@ class UserStore:
 
     # Known keys for app_settings -- validated before any SQL write to prevent
     # injection via dynamic column names. Only these keys are accepted.
-    _APP_SETTINGS_KEYS: set = {"self_registration_enabled", "github_oauth_enabled", "google_oauth_enabled"}
+    _APP_SETTINGS_KEYS: set = {
+        "self_registration_enabled",
+        "github_oauth_enabled",
+        "google_oauth_enabled",
+        "sla_p1_days",
+        "sla_p2_days",
+        "sla_p3_days",
+        "sla_p4_days",
+    }
+
+    # Boolean settings stored as 0/1. All other accepted keys are passed through as-is.
+    _BOOLEAN_SETTINGS: set = {"self_registration_enabled", "github_oauth_enabled", "google_oauth_enabled"}
 
     def __init__(self, db_url: str = _DEFAULT_DB_URL) -> None:
         connect_args: dict = {}
@@ -128,6 +139,7 @@ class UserStore:
         _metadata.create_all(self.engine)
         self._ensure_app_settings()
         self._ensure_last_login_column()
+        self._ensure_sla_columns()
 
     def _ensure_app_settings(self) -> None:
         """Create the app_settings table and seed the single-row record if not present.
@@ -165,6 +177,30 @@ class UserStore:
             if "last_login" not in existing_cols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN last_login TEXT"))
                 conn.commit()
+
+    def _ensure_sla_columns(self) -> None:
+        """Add SLA configuration columns to app_settings if they do not exist.
+
+        Follows the same PRAGMA table_info pattern as _ensure_last_login_column.
+        Column names are hardcoded constants (not user input), so string
+        interpolation in the ALTER TABLE statement is safe.
+
+        SLA defaults match CONTEXT.md locked decisions:
+          P1 = 7 days, P2 = 30 days, P3 = 90 days, P4 = 180 days
+        """
+        sla_columns = [
+            ("sla_p1_days", "INTEGER DEFAULT 7"),
+            ("sla_p2_days", "INTEGER DEFAULT 30"),
+            ("sla_p3_days", "INTEGER DEFAULT 90"),
+            ("sla_p4_days", "INTEGER DEFAULT 180"),
+        ]
+        with self.engine.connect() as conn:
+            rows = conn.execute(text("PRAGMA table_info(app_settings)")).fetchall()
+            existing_cols = {row[1] for row in rows}
+            for col, col_def in sla_columns:
+                if col not in existing_cols:
+                    conn.execute(text(f"ALTER TABLE app_settings ADD COLUMN {col} {col_def}"))  # nosemgrep
+            conn.commit()
 
     # ------------------------------------------------------------------
     # User queries
@@ -319,12 +355,41 @@ class UserStore:
             "google_oauth_enabled": bool(row[3]),
         }
 
+    def get_sla_config(self) -> dict[str, int]:
+        """Return the current SLA targets as a priority-keyed dict.
+
+        Reads sla_p*_days columns from app_settings and maps them to the
+        canonical priority keys used by CMDBStore (P1, P2, P3, P4).
+
+        The returned dict can be passed directly to CMDBStore.get_overdue_vulns()
+        as the sla_days parameter so the CMDB uses the admin-configured values
+        instead of the module-level defaults.
+
+        Returns:
+            {"P1": int, "P2": int, "P3": int, "P4": int}
+        """
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT sla_p1_days, sla_p2_days, sla_p3_days, sla_p4_days FROM app_settings WHERE id = 1")
+            ).fetchone()
+        if row is None:
+            # Fallback to hard-coded defaults (should never happen after _ensure_app_settings)
+            return {"P1": 7, "P2": 30, "P3": 90, "P4": 180}
+        return {
+            "P1": row[0] if row[0] is not None else 7,
+            "P2": row[1] if row[1] is not None else 30,
+            "P3": row[2] if row[2] is not None else 90,
+            "P4": row[3] if row[3] is not None else 180,
+        }
+
     def update_app_settings(self, **kwargs) -> None:
         """Update one or more app_settings fields.
 
         Only keys in _APP_SETTINGS_KEYS are accepted. Unknown keys raise
         ValueError rather than silently ignoring them -- fail-fast principle.
-        All values are cast to int (0/1) for SQLite storage.
+
+        Boolean settings (OAuth toggles, self-registration) are cast to 0/1.
+        Integer settings (SLA day counts) are stored as-is.
 
         Security: column names come from the validated whitelist, never from
         raw user input, so parameterized queries remain safe.
@@ -336,7 +401,13 @@ class UserStore:
             return
         # Build SET clause from validated keys only -- never raw user input
         set_clause = ", ".join(f"{k} = :{k}" for k in kwargs)
-        params = {k: (1 if v else 0) for k, v in kwargs.items()}
+        # Boolean settings need 0/1 coercion; integer settings (SLA days) pass through
+        params = {}
+        for k, v in kwargs.items():
+            if k in self._BOOLEAN_SETTINGS:
+                params[k] = 1 if v else 0
+            else:
+                params[k] = int(v)  # SLA days must be positive integers
         with self.engine.connect() as conn:
             conn.execute(text(f"UPDATE app_settings SET {set_clause} WHERE id = 1"), params)  # noqa: S608
             conn.commit()

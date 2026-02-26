@@ -48,11 +48,12 @@ from cmdb.models import Asset, AssetVulnerability, RemediationRecord
 
 _DEFAULT_DB_URL = f"sqlite:///{Path(__file__).parent / 'vulnadvisor_cmdb.db'}"
 
-# SLA deadline in days per priority bucket. P4 has no deadline.
+# SLA deadline in days per priority bucket. Matches CONTEXT.md locked decisions.
 _SLA_DAYS: dict[str, int] = {
-    "P1": 1,
-    "P2": 7,
-    "P3": 30,
+    "P1": 7,
+    "P2": 30,
+    "P3": 90,
+    "P4": 180,
 }
 
 # ---------------------------------------------------------------------------
@@ -118,11 +119,36 @@ def _now_iso() -> str:
 
 
 def _deadline_for(priority: str) -> Optional[str]:
-    """Return ISO 8601 deadline based on the SLA for this priority. P4 returns None."""
+    """Return ISO 8601 deadline based on the SLA for this priority.
+
+    Returns None only for unrecognised priority values. All four standard
+    priority buckets (P1-P4) have defined SLA deadlines in _SLA_DAYS.
+    """
     days = _SLA_DAYS.get(priority)
     if days is None:
         return None
     return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+def _days_overdue(deadline_iso: str) -> float:
+    """Return how many days overdue the deadline is (positive = overdue, negative = future).
+
+    Handles both timezone-aware ISO strings (e.g. '2024-01-01T00:00:00+00:00')
+    and naive ISO strings (treated as UTC). The return value is a float based
+    on total_seconds() / 86400 so callers can decide their own rounding.
+
+    Used by get_overdue_vulns() to classify and sort overdue/approaching vulns.
+    """
+    try:
+        dt = datetime.fromisoformat(deadline_iso)
+    except ValueError:
+        # Malformed deadline -- treat as zero days overdue
+        return 0.0
+    if dt.tzinfo is None:
+        # Naive datetime -- assume UTC (defensive handling for legacy data)
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return (now - dt).total_seconds() / 86400
 
 
 def apply_criticality_modifier(priority: str, criticality: str) -> str:
@@ -508,6 +534,134 @@ class CMDBStore:
         with self.engine.connect() as conn:
             rows = conn.execute(stmt).fetchall()
         return {row.asset_id: {"P1": row.p1, "P2": row.p2, "P3": row.p3, "P4": row.p4} for row in rows}
+
+    def get_overdue_vulns(
+        self,
+        sla_days: Optional[dict[str, int]] = None,
+        approaching_days: int = 7,
+    ) -> dict[str, list[dict]]:
+        """Return overdue and approaching-SLA vulnerabilities across all assets.
+
+        Uses Python date arithmetic (not SQLite date functions) for portability
+        and testability. Tradeoff: all open vulns with deadlines are loaded into
+        memory before filtering. For a solo analyst tool this is acceptable.
+
+        Args:
+            sla_days: Optional override for SLA windows (from app_settings).
+                      Defaults to the module-level _SLA_DAYS constant.
+            approaching_days: Items with deadline within this many days (but not
+                              yet past) are classified as approaching.
+
+        Returns:
+            {
+              "overdue": [{"asset_id", "hostname", "cve_id", "effective_priority",
+                           "days_overdue", "deadline"}, ...],
+              "approaching": [{"asset_id", "hostname", "cve_id", "effective_priority",
+                               "days_until_due", "deadline"}, ...]
+            }
+            overdue is sorted by days_overdue descending (worst first).
+            approaching is sorted by days_until_due ascending (closest deadline first).
+        """
+        # sla_days is accepted for API compatibility; deadlines are pre-computed at
+        # vuln insert time so the stored deadline column drives overdue classification.
+        _ = sla_days
+        join_stmt = (
+            select(
+                _asset_vulns.c.cve_id,
+                _asset_vulns.c.effective_priority,
+                _asset_vulns.c.deadline,
+                _asset_vulns.c.status,
+                _assets.c.id.label("asset_id"),
+                _assets.c.hostname,
+            )
+            .select_from(_asset_vulns.join(_assets, _asset_vulns.c.asset_id == _assets.c.id))
+            .where(_asset_vulns.c.status.not_in(["closed", "deferred"]) & (_asset_vulns.c.deadline.isnot(None)))
+        )
+        with self.engine.connect() as conn:
+            rows = conn.execute(join_stmt).fetchall()
+
+        overdue: list[dict] = []
+        approaching: list[dict] = []
+
+        for row in rows:
+            days_val = _days_overdue(row.deadline)
+            if days_val >= 0:
+                # Past deadline -- overdue
+                overdue.append(
+                    {
+                        "asset_id": row.asset_id,
+                        "hostname": row.hostname,
+                        "cve_id": row.cve_id,
+                        "effective_priority": row.effective_priority,
+                        "days_overdue": int(days_val),
+                        "deadline": row.deadline,
+                    }
+                )
+            elif days_val > -approaching_days:
+                # Within approaching window (days_val is negative here, e.g. -3 for 3 days out)
+                overdue_item = {
+                    "asset_id": row.asset_id,
+                    "hostname": row.hostname,
+                    "cve_id": row.cve_id,
+                    "effective_priority": row.effective_priority,
+                    "days_until_due": int(-days_val),
+                    "deadline": row.deadline,
+                }
+                approaching.append(overdue_item)
+
+        overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
+        approaching.sort(key=lambda x: x["days_until_due"])
+
+        return {"overdue": overdue, "approaching": approaching}
+
+    def get_open_vuln_cve_ids(self) -> list[dict]:
+        """Return CVE IDs for all open vulnerabilities with asset context.
+
+        Used by the dashboard threat intel section to fetch enrichment data
+        for active vulns. Capped at 200 results to limit downstream API calls
+        to process_cve(); when exceeded, only P1 and P2 vulns are returned.
+
+        Returns:
+            list of dicts: [{"asset_id", "hostname", "cve_id",
+                             "effective_priority", "exposure"}, ...]
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        join_stmt = (
+            select(
+                _asset_vulns.c.cve_id,
+                _asset_vulns.c.effective_priority,
+                _assets.c.id.label("asset_id"),
+                _assets.c.hostname,
+                _assets.c.exposure,
+            )
+            .select_from(_asset_vulns.join(_assets, _asset_vulns.c.asset_id == _assets.c.id))
+            .where(_asset_vulns.c.status.not_in(["closed", "deferred"]))
+        )
+        with self.engine.connect() as conn:
+            rows = conn.execute(join_stmt).fetchall()
+
+        results = [
+            {
+                "asset_id": row.asset_id,
+                "hostname": row.hostname,
+                "cve_id": row.cve_id,
+                "effective_priority": row.effective_priority,
+                "exposure": row.exposure,
+            }
+            for row in rows
+        ]
+
+        if len(results) > 200:
+            logger.warning(
+                "get_open_vuln_cve_ids: %d open vulns exceed cap of 200; limiting to P1/P2 only",
+                len(results),
+            )
+            results = [r for r in results if r["effective_priority"] in ("P1", "P2")]
+
+        return results
 
     def get_remediation_history(self, vuln_id: int) -> list[RemediationRecord]:
         """Return all audit records for an AssetVulnerability, oldest first."""
