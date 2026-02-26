@@ -97,6 +97,11 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # template context. The function receives the request object from the template
 # context (always present) and returns the User or None.
 templates.env.globals["try_get_current_user"] = try_get_current_user
+# Expose get_enabled_providers as a Jinja2 global so layout.html (and the
+# session-expiry modal partial it includes) can render OAuth buttons without
+# requiring every route handler to pass providers in the context dict.
+# get_enabled_providers() reads only from Settings (no request context needed).
+templates.env.globals["get_enabled_providers"] = get_enabled_providers
 router = APIRouter()
 
 # ---------------------------------------------------------------------------

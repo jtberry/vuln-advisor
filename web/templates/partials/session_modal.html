@@ -1,0 +1,82 @@
+<!--
+  partials/session_modal.html -- Session expiry re-authentication modal.
+
+  Included by layout.html only when current_user is set (authenticated pages).
+  The modal appears when the JS timer in layout.html fires -- it is NEVER
+  shown to unauthenticated users.
+
+  UX decision: no pre-expiry warning or countdown. The modal appears only
+  after expiry. This keeps the UI clean for the target audience (security
+  analysts who expect the session to just work until it doesn't).
+
+  CSRF note: The modal form posts to POST /login, which validates CSRF.
+  The CSRF cookie may also be expired for very long idle sessions. In that
+  case, fastapi-csrf-protect raises CsrfProtectError, which our error handler
+  redirects to the login page with a flash message. This is the correct
+  fallback -- the user lands on /login, logs in, and is returned to their
+  destination via the ?next= parameter.
+
+  Security:
+  - data-bs-backdrop="static": prevents dismissing by clicking outside --
+    user MUST re-authenticate before continuing.
+  - data-bs-keyboard="false": prevents closing with Escape key.
+  - The username field is readonly -- users can only re-auth as themselves.
+    This prevents a subtle attack where a shared-machine user could swap in
+    a different username without leaving the page.
+-->
+<div class="modal fade" id="sessionExpiredModal"
+     data-bs-backdrop="static"
+     data-bs-keyboard="false"
+     tabindex="-1"
+     aria-labelledby="sessionExpiredLabel"
+     aria-modal="true"
+     role="dialog">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content bg-dark text-light border-secondary">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title" id="sessionExpiredLabel">
+          <span class="text-warning me-2">&#9888;</span>Session Expired
+        </h5>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary mb-3">
+          Your session has timed out. Log back in and you'll pick up right where you left off.
+        </p>
+        <form method="post" id="sessionReauthForm" action="/login">
+          <input type="hidden" name="csrf_token" id="sessionCsrfToken" value="">
+          <div class="mb-3">
+            <label for="sessionUsername" class="form-label">Username</label>
+            <input type="text"
+                   class="form-control bg-dark text-light border-secondary"
+                   id="sessionUsername"
+                   name="username"
+                   value="{{ current_user.username if current_user else '' }}"
+                   readonly
+                   autocomplete="username">
+          </div>
+          <div class="mb-3">
+            <label for="sessionPassword" class="form-label">Password</label>
+            <input type="password"
+                   class="form-control bg-dark text-light border-secondary"
+                   id="sessionPassword"
+                   name="password"
+                   autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Log In</button>
+        </form>
+
+        {% set providers = get_enabled_providers() %}
+        {% if providers %}
+        <div class="text-center my-3 text-muted small">-- or --</div>
+        {% for provider in providers %}
+        <a href="/login/oauth/{{ provider.name }}"
+           id="sessionOauth{{ provider.name | capitalize }}"
+           class="btn btn-outline-secondary w-100 mb-2">
+          Sign in with {{ provider.label }}
+        </a>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>

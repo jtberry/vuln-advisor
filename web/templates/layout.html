@@ -144,5 +144,80 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+{% set current_user = try_get_current_user(request) %}
+{% if current_user %}
+  {% include "partials/session_modal.html" %}
+  <script>
+  /*
+   * Session expiry detection -- schedules the re-auth modal based on the
+   * non-httpOnly session_expires_at cookie set by set_auth_cookie().
+   *
+   * Why a cookie and not a JS variable? The server sets the cookie on every
+   * login, so the expiry is always accurate even after a page refresh. A JS
+   * variable would reset to the page-load time on every navigation.
+   *
+   * Security: session_expires_at contains only a Unix timestamp. No user data,
+   * no token material. Exposing it to JS is safe -- it lets the modal fire at
+   * the right time without any server round-trips.
+   *
+   * CSRF token handling: we try to read the fastapi-csrf-token cookie and
+   * pre-populate the hidden CSRF field. If the CSRF cookie is also expired
+   * (long idle session), the POST /login handler will raise CsrfProtectError,
+   * which our error handler redirects to /login with a flash message. That is
+   * the correct fallback -- not a silent failure.
+   */
+  (function () {
+    var match = document.cookie.match(/session_expires_at=(\d+)/);
+    if (!match) { return; }  // Not logged in or cookie already cleared
+
+    var expiresAt = parseInt(match[1], 10);
+    var now = Math.floor(Date.now() / 1000);
+    var remaining = expiresAt - now;
+
+    function showSessionModal() {
+      var modalEl = document.getElementById('sessionExpiredModal');
+      if (!modalEl) { return; }
+
+      // Set the form action to POST /login with the current path as ?next=
+      // so the user returns to exactly where they were after re-authenticating.
+      var form = document.getElementById('sessionReauthForm');
+      var nextPath = encodeURIComponent(window.location.pathname + window.location.search);
+      form.action = '/login?next=' + nextPath;
+
+      // Update OAuth button hrefs too (same ?next= for consistent return URL)
+      var oauthButtons = modalEl.querySelectorAll('a[id^="sessionOauth"]');
+      for (var i = 0; i < oauthButtons.length; i++) {
+        var base = oauthButtons[i].getAttribute('href').split('?')[0];
+        oauthButtons[i].setAttribute('href', base + '?next=' + nextPath);
+      }
+
+      // Try to pre-populate the CSRF token from the cookie.
+      // If the CSRF cookie is expired, leave the field empty -- the POST
+      // handler will redirect to /login with a flash message (correct fallback).
+      var csrfMatch = document.cookie.match(/fastapi-csrf-token=([^;]+)/);
+      if (csrfMatch) {
+        document.getElementById('sessionCsrfToken').value = decodeURIComponent(csrfMatch[1]);
+      }
+
+      var modal = new bootstrap.Modal(modalEl);
+      modal.show();
+
+      // Focus the password field when the modal finishes opening
+      modalEl.addEventListener('shown.bs.modal', function () {
+        document.getElementById('sessionPassword').focus();
+      }, { once: true });
+    }
+
+    if (remaining <= 0) {
+      // Session already expired when this page loaded (e.g. user left a tab open)
+      showSessionModal();
+    } else {
+      // Schedule the modal to appear at the exact moment the session expires
+      setTimeout(showSessionModal, remaining * 1000);
+    }
+  })();
+  </script>
+{% endif %}
 </body>
 </html>
