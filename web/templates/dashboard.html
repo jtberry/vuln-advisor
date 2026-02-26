@@ -24,7 +24,7 @@
 {# ── KPI cards ───────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
 
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-xl">
     <div class="card kpi-card kpi-assets h-100">
       <div class="card-body">
         <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Assets</div>
@@ -34,7 +34,7 @@
     </div>
   </div>
 
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-xl">
     <div class="card kpi-card kpi-p1 h-100">
       <div class="card-body">
         <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">P1 — Critical</div>
@@ -44,7 +44,7 @@
     </div>
   </div>
 
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-xl">
     <div class="card kpi-card kpi-open h-100">
       <div class="card-body">
         <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Open Vulns</div>
@@ -58,166 +58,471 @@
     </div>
   </div>
 
-  <div class="col-6 col-xl-3">
+  <div class="col-6 col-xl">
+    <div class="card kpi-card h-100">
+      <div class="card-body">
+        <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">KEV Matches</div>
+        <div class="kpi-number {% if kev_count > 0 %}text-p1{% else %}text-muted{% endif %}"
+             style="{% if kev_count == 0 %}color: #484f58{% endif %}">
+          {{ kev_count }}
+        </div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">active KEV entries</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-xl">
     <div class="card kpi-card kpi-overdue h-100">
       <div class="card-body">
         <div class="text-muted mb-2" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em">Overdue SLAs</div>
         <div class="kpi-number {% if overdue_count > 0 %}text-p1{% else %}text-muted{% endif %}">
           {{ overdue_count }}
         </div>
-        <div class="text-muted mt-1" style="font-size: 0.78rem">past deadline</div>
+        <div class="text-muted mt-1" style="font-size: 0.78rem">
+          past deadline
+          {% if overdue_data.approaching | length > 0 %}
+          <br><span class="text-warning">{{ overdue_data.approaching | length }} approaching</span>
+          {% endif %}
+        </div>
       </div>
     </div>
   </div>
 
 </div>
 
-{# ── Asset risk table ────────────────────────────────────────────── #}
-<div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
-    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Asset Risk</span>
-    <span class="text-muted" style="font-size: 0.75rem">sorted by P1 count</span>
+{# ── Severity chart + Asset risk table ───────────────────────────── #}
+<div class="row g-3 mb-4">
+
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Severity Breakdown</span>
+        <span class="text-muted" style="font-size: 0.75rem">open vulnerabilities</span>
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center" style="height: 280px">
+        {% if total_open > 0 %}
+        <canvas id="severityChart"></canvas>
+        {% else %}
+        <div class="text-center text-muted" style="font-size: 0.88rem">No open vulnerabilities</div>
+        {% endif %}
+      </div>
+    </div>
   </div>
 
+  <div class="col-lg-7">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center py-2 px-3">
+        <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Asset Risk</span>
+        <span class="text-muted" style="font-size: 0.75rem">sorted by P1 count</span>
+      </div>
+
+      <div class="card-body p-0" style="overflow-y: auto; max-height: 280px">
+        {% if asset_rows %}
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th style="padding-left: 1rem">Hostname</th>
+              <th>Criticality</th>
+              <th class="text-center">P1</th>
+              <th class="text-center">P2</th>
+              <th class="text-center">P3</th>
+              <th class="text-center">P4</th>
+              <th>Nearest SLA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in asset_rows %}
+            <tr style="cursor: pointer" onclick="location.href='/assets/{{ row.asset.id }}'">
+
+              <td style="padding-left: 1rem">
+                <a href="/assets/{{ row.asset.id }}"
+                   class="text-decoration-none fw-semibold font-mono"
+                   style="color: #58a6ff; font-size: 0.9rem"
+                   onclick="event.stopPropagation()">
+                  {{ row.asset.hostname }}
+                </a>
+              </td>
+
+              <td>
+                <span class="badge badge-crit-{{ row.asset.criticality }}">
+                  {{ row.asset.criticality.upper() }}
+                </span>
+              </td>
+
+              <td class="text-center">
+                {% if row.counts.P1 > 0 %}
+                <span class="text-p1 fw-bold">{{ row.counts.P1 }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <td class="text-center">
+                {% if row.counts.P2 > 0 %}
+                <span class="text-p2">{{ row.counts.P2 }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <td class="text-center">
+                {% if row.counts.P3 > 0 %}
+                <span class="text-p3">{{ row.counts.P3 }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <td class="text-center">
+                {% if row.counts.P4 > 0 %}
+                <span class="text-p4">{{ row.counts.P4 }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+
+              <td>
+                <span class="{{ row.nearest_deadline.css }}" style="font-size: 0.82rem">
+                  {{ row.nearest_deadline.text }}
+                </span>
+              </td>
+
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        {% else %}
+        <div class="text-center py-4">
+          <div class="text-muted mb-2">No assets registered yet.</div>
+          <div style="font-size: 0.82rem; color: #484f58">
+            Use <a href="/assets/new">+ Add Asset</a> to register your first asset,
+            or <a href="/ingest">Import Scan</a> to bulk-load from a scanner file.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if total_pages > 1 %}
+      <div class="card-footer d-flex justify-content-between align-items-center py-2 px-3"
+           style="background-color: #161b22; border-top-color: #21262d">
+        <span class="text-muted" style="font-size: 0.78rem">
+          Showing {{ (page - 1) * page_size + 1 }}–{{ [(page * page_size), total_assets] | min }}
+          of {{ total_assets }} assets
+        </span>
+        <nav>
+          <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
+
+            <li class="page-item {% if page == 1 %}disabled{% endif %}">
+              <a class="page-link"
+                 href="/?page={{ page - 1 }}"
+                 style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+                &laquo;
+              </a>
+            </li>
+
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+              <a class="page-link"
+                 href="/?page={{ p }}"
+                 style="{% if p == page %}background-color: #1f6feb; border-color: #1f6feb; color: #fff;{% else %}background-color: #21262d; border-color: #30363d; color: #8b949e;{% endif %} font-size: 0.78rem">
+                {{ p }}
+              </a>
+            </li>
+            {% endfor %}
+
+            <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+              <a class="page-link"
+                 href="/?page={{ page + 1 }}"
+                 style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+                &raquo;
+              </a>
+            </li>
+
+          </ul>
+        </nav>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+
+{# ── Threat Intelligence ──────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Threat Intelligence</span>
+    <div class="text-muted" style="font-size: 0.75rem">KEV entries and high-EPSS vulnerabilities affecting tracked assets</div>
+  </div>
   <div class="card-body p-0">
-    {% if asset_rows %}
-    <table class="table table-hover mb-0">
+    {% if threat_intel_items %}
+    <table class="table table-hover mb-0" id="threatIntelTable">
       <thead>
         <tr>
-          <th style="padding-left: 1rem">Hostname</th>
-          <th>Criticality</th>
-          <th>Exposure</th>
-          <th class="text-center">P1</th>
-          <th class="text-center">P2</th>
-          <th class="text-center">P3</th>
-          <th class="text-center">P4</th>
-          <th>Nearest SLA</th>
+          <th style="padding-left: 1rem">CVE ID</th>
+          <th>Asset</th>
+          <th>Threat Signal</th>
+          <th>Severity</th>
+          <th>EPSS / KEV Due</th>
         </tr>
       </thead>
       <tbody>
-        {% for row in asset_rows %}
-        <tr style="cursor: pointer" onclick="location.href='/assets/{{ row.asset.id }}'">
-
+        {% for item in threat_intel_items %}
+        <tr class="threat-intel-row">
           <td style="padding-left: 1rem">
-            <a href="/assets/{{ row.asset.id }}"
-               class="text-decoration-none fw-semibold font-mono"
-               style="color: #58a6ff; font-size: 0.9rem"
-               onclick="event.stopPropagation()">
-              {{ row.asset.hostname }}
+            <a href="/assets/{{ item.asset_id }}"
+               class="text-decoration-none font-mono fw-semibold"
+               style="color: #58a6ff; font-size: 0.88rem">
+              {{ item.cve_id }}
             </a>
-            {% if row.asset.owner %}
-            <div class="text-muted" style="font-size: 0.72rem">{{ row.asset.owner }}</div>
+          </td>
+          <td style="font-size: 0.88rem; color: #8b949e">{{ item.hostname }}</td>
+          <td>
+            {% if item.is_kev %}
+            <span class="badge" style="background-color: #f85149; color: #fff; font-size: 0.75rem">KEV</span>
+            {% endif %}
+            {% if item.epss_score and item.epss_score > 0.5 %}
+            <span class="badge" style="background-color: #f0883e; color: #fff; font-size: 0.75rem">
+              EPSS {{ "%.0f"|format(item.epss_score * 100) }}%
+            </span>
             {% endif %}
           </td>
-
           <td>
-            <span class="badge badge-crit-{{ row.asset.criticality }}">
-              {{ row.asset.criticality.upper() }}
+            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
+              {{ item.effective_priority }}
             </span>
           </td>
-
-          <td>
-            <span class="badge badge-exp-{{ row.asset.exposure }}">
-              {{ row.asset.exposure.upper() }}
-            </span>
-          </td>
-
-          <td class="text-center">
-            {% if row.counts.P1 > 0 %}
-            <span class="text-p1 fw-bold">{{ row.counts.P1 }}</span>
+          <td style="font-size: 0.82rem; color: #8b949e">
+            {% if item.epss_score %}
+              {{ "%.3f"|format(item.epss_score) }}
             {% else %}
-            <span class="text-muted">—</span>
+              —
             {% endif %}
           </td>
-
-          <td class="text-center">
-            {% if row.counts.P2 > 0 %}
-            <span class="text-p2">{{ row.counts.P2 }}</span>
-            {% else %}
-            <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-
-          <td class="text-center">
-            {% if row.counts.P3 > 0 %}
-            <span class="text-p3">{{ row.counts.P3 }}</span>
-            {% else %}
-            <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-
-          <td class="text-center">
-            {% if row.counts.P4 > 0 %}
-            <span class="text-p4">{{ row.counts.P4 }}</span>
-            {% else %}
-            <span class="text-muted">—</span>
-            {% endif %}
-          </td>
-
-          <td>
-            <span class="{{ row.nearest_deadline.css }}" style="font-size: 0.82rem">
-              {{ row.nearest_deadline.text }}
-            </span>
-          </td>
-
         </tr>
         {% endfor %}
       </tbody>
     </table>
-
+    {# Client-side pagination controls for threat intel table #}
+    <div id="threatIntelPager" class="d-flex justify-content-between align-items-center py-2 px-3"
+         style="background-color: #161b22; border-top: 1px solid #21262d; display: none !important">
+      <span class="text-muted" id="threatIntelPageInfo" style="font-size: 0.78rem"></span>
+      <nav>
+        <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
+          <li class="page-item" id="threatPrevLi">
+            <button class="page-link" id="threatPrev"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &laquo;
+            </button>
+          </li>
+          <li class="page-item" id="threatNextLi">
+            <button class="page-link" id="threatNext"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &raquo;
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
     {% else %}
-    <div class="text-center py-5">
-      <div class="text-muted mb-2">No assets registered yet.</div>
-      <div style="font-size: 0.82rem; color: #484f58">
-        Use <a href="/assets/new">+ Add Asset</a> to register your first asset,
-        or <a href="/ingest">Import Scan</a> to bulk-load from a scanner file.
-      </div>
+    <div class="text-center py-4 text-muted" style="font-size: 0.88rem">
+      No KEV or high-EPSS items on tracked assets
     </div>
     {% endif %}
-
   </div>
-
-  {% if total_pages > 1 %}
-  <div class="card-footer d-flex justify-content-between align-items-center py-2 px-3"
-       style="background-color: #161b22; border-top-color: #21262d">
-    <span class="text-muted" style="font-size: 0.78rem">
-      Showing {{ (page - 1) * page_size + 1 }}–{{ [(page * page_size), total_assets] | min }}
-      of {{ total_assets }} assets
-    </span>
-    <nav>
-      <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
-
-        <li class="page-item {% if page == 1 %}disabled{% endif %}">
-          <a class="page-link"
-             href="/?page={{ page - 1 }}"
-             style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
-            &laquo;
-          </a>
-        </li>
-
-        {% for p in range(1, total_pages + 1) %}
-        <li class="page-item {% if p == page %}active{% endif %}">
-          <a class="page-link"
-             href="/?page={{ p }}"
-             style="{% if p == page %}background-color: #1f6feb; border-color: #1f6feb; color: #fff;{% else %}background-color: #21262d; border-color: #30363d; color: #8b949e;{% endif %} font-size: 0.78rem">
-            {{ p }}
-          </a>
-        </li>
-        {% endfor %}
-
-        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
-          <a class="page-link"
-             href="/?page={{ page + 1 }}"
-             style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
-            &raquo;
-          </a>
-        </li>
-
-      </ul>
-    </nav>
-  </div>
-  {% endif %}
-
 </div>
 
+{# ── Overdue SLA ──────────────────────────────────────────────────── #}
+<div class="card mb-4">
+  <div class="card-header py-2 px-3">
+    <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">SLA Status</span>
+    <div class="text-muted" style="font-size: 0.75rem">
+      {{ overdue_data.overdue | length }} overdue
+      {% if overdue_data.approaching | length > 0 %}
+      &middot; {{ overdue_data.approaching | length }} approaching
+      {% endif %}
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {% set all_sla_items = overdue_data.overdue + overdue_data.approaching %}
+    {% if all_sla_items %}
+    <table class="table table-hover mb-0" id="slaTable">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem">Asset</th>
+          <th>CVE ID</th>
+          <th>Severity</th>
+          <th>SLA Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# Overdue items first (red) #}
+        {% for item in overdue_data.overdue %}
+        <tr class="sla-row">
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ item.asset_id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.88rem">
+              {{ item.hostname }}
+            </a>
+          </td>
+          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
+          <td>
+            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
+              {{ item.effective_priority }}
+            </span>
+          </td>
+          <td class="text-danger fw-semibold" style="font-size: 0.88rem">
+            {{ item.days_overdue }} day{% if item.days_overdue != 1 %}s{% endif %} overdue
+          </td>
+        </tr>
+        {% endfor %}
+        {# Approaching items (amber) #}
+        {% for item in overdue_data.approaching %}
+        <tr class="sla-row">
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ item.asset_id }}"
+               class="text-decoration-none fw-semibold font-mono"
+               style="color: #58a6ff; font-size: 0.88rem">
+              {{ item.hostname }}
+            </a>
+          </td>
+          <td style="font-size: 0.88rem; color: #8b949e" class="font-mono">{{ item.cve_id }}</td>
+          <td>
+            <span class="badge badge-{{ item.effective_priority | lower }}" style="font-size: 0.75rem">
+              {{ item.effective_priority }}
+            </span>
+          </td>
+          <td class="text-warning" style="font-size: 0.88rem">
+            due in {{ item.days_remaining }} day{% if item.days_remaining != 1 %}s{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {# Client-side pagination controls for SLA table #}
+    <div id="slaPager" class="d-flex justify-content-between align-items-center py-2 px-3"
+         style="background-color: #161b22; border-top: 1px solid #21262d; display: none !important">
+      <span class="text-muted" id="slaPageInfo" style="font-size: 0.78rem"></span>
+      <nav>
+        <ul class="pagination pagination-sm mb-0" style="gap: 0.25rem">
+          <li class="page-item" id="slaPrevLi">
+            <button class="page-link" id="slaPrev"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &laquo;
+            </button>
+          </li>
+          <li class="page-item" id="slaNextLi">
+            <button class="page-link" id="slaNext"
+                    style="background-color: #21262d; border-color: #30363d; color: #8b949e; font-size: 0.78rem">
+              &raquo;
+            </button>
+          </li>
+        </ul>
+      </nav>
+    </div>
+    {% else %}
+    <div class="text-center py-4 text-muted" style="font-size: 0.88rem">
+      All vulnerabilities are within SLA targets
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // ── Severity doughnut chart ────────────────────────────────────────
+  // Data island: priority_counts injected server-side via the tojson filter.
+  // tojson escapes < > & characters, preventing XSS and script injection.
+  var counts = {{ priority_counts | tojson }};
+
+  var canvas = document.getElementById("severityChart");
+  if (canvas) {
+    var total = (counts.P1 || 0) + (counts.P2 || 0) + (counts.P3 || 0) + (counts.P4 || 0);
+    new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: ["P1 — Critical", "P2 — High", "P3 — Medium", "P4 — Low"],
+        datasets: [{
+          data: [counts.P1 || 0, counts.P2 || 0, counts.P3 || 0, counts.P4 || 0],
+          backgroundColor: ["#f85149", "#d29922", "#388bfd", "#484f58"],
+          borderColor: "#161b22",
+          borderWidth: 2
+        }]
+      },
+      options: {
+        cutout: "65%",
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: {
+              color: "#8b949e",
+              font: { size: 12 },
+              padding: 12
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var count = ctx.parsed;
+                var pct = total > 0 ? Math.round((count / total) * 100) : 0;
+                return " " + count + " (" + pct + "%)";
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── Client-side table pagination helper ───────────────────────────
+  function initTablePager(tableId, pageInfoId, prevId, nextId, pagerId, pageSize) {
+    var rows = document.querySelectorAll("#" + tableId + " tbody tr");
+    if (!rows.length) { return; }
+    var total = rows.length;
+    var currentPage = 1;
+    var totalPages = Math.ceil(total / pageSize);
+
+    function render() {
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+      rows.forEach(function (row, i) {
+        row.style.display = (i >= start && i < end) ? "" : "none";
+      });
+      var showing = Math.min(end, total);
+      document.getElementById(pageInfoId).textContent =
+        "Showing " + (start + 1) + "\u2013" + showing + " of " + total;
+      document.getElementById(prevId).disabled = currentPage <= 1;
+      document.getElementById(nextId).disabled = currentPage >= totalPages;
+      document.getElementById(prevId).parentElement.classList.toggle("disabled", currentPage <= 1);
+      document.getElementById(nextId).parentElement.classList.toggle("disabled", currentPage >= totalPages);
+    }
+
+    if (totalPages > 1) {
+      // Only show pager when there is more than one page
+      var pager = document.getElementById(pagerId);
+      pager.style.removeProperty("display");
+      document.getElementById(prevId).addEventListener("click", function () {
+        if (currentPage > 1) { currentPage--; render(); }
+      });
+      document.getElementById(nextId).addEventListener("click", function () {
+        if (currentPage < totalPages) { currentPage++; render(); }
+      });
+      render();
+    }
+  }
+
+  initTablePager("threatIntelTable", "threatIntelPageInfo", "threatPrev", "threatNext", "threatIntelPager", 10);
+  initTablePager("slaTable", "slaPageInfo", "slaPrev", "slaNext", "slaPager", 10);
+
+})();
+</script>
 {% endblock %}
