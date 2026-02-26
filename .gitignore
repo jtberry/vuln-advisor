@@ -9,3 +9,6 @@ venv/
 # Walk phase — local cache database
 cache/*.db
 *.db
+
+# Planning docs — local only
+.planning/
