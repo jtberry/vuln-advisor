@@ -268,6 +268,12 @@ def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
 
     # JS-readable expiry timestamp -- NOT httpOnly (required for modal timer)
     # Contains only a Unix timestamp, no sensitive data.
+    #
+    # session_expires_at lives longer than access_token (2x the duration) so JS
+    # can still read the timestamp AFTER the JWT cookie has expired. This is what
+    # triggers the session-expiry modal on an already-open page: if access_token
+    # disappears but session_expires_at is still present, the client knows the
+    # session expired (rather than the user never being logged in).
     expires_at = int(time.time()) + duration
     response.set_cookie(
         "session_expires_at",
@@ -275,5 +281,5 @@ def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
         httponly=False,  # JS must read this to schedule the session-expiry modal
         samesite="lax",
         secure=_settings.secure_cookies,
-        max_age=duration,
+        max_age=duration * 2,
     )
