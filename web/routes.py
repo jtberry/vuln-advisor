@@ -128,10 +128,22 @@ router = APIRouter()
 
 @CsrfProtect.load_config
 def get_csrf_config() -> list[tuple[str, str]]:
-    """Provide the SECRET_KEY to fastapi-csrf-protect from centralized settings."""
+    """Configure fastapi-csrf-protect from centralized settings.
+
+    token_location="body" tells the library to read the CSRF token from the
+    form POST body (the hidden input named "csrf_token") rather than from an
+    X-CSRF-Token HTTP header. HTML forms cannot set custom headers, so header
+    mode only works for AJAX/JS clients. Our forms are server-rendered HTML.
+
+    token_key="csrf_token" matches the name="" attribute on our hidden inputs.
+    """
     from core.config import get_settings
 
-    return [("secret_key", get_settings().secret_key)]
+    return [
+        ("secret_key", get_settings().secret_key),
+        ("token_location", "body"),
+        ("token_key", "csrf_token"),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -1326,7 +1338,7 @@ async def setup_post(
     # without needing to re-enter credentials. Pattern: create token -> set cookie
     # -> return redirect (cookie attaches to RedirectResponse, not the final page).
     token = create_access_token(new_user_id, new_admin.username, new_admin.role)
-    resp = RedirectResponse("/dashboard", status_code=302)
+    resp = RedirectResponse("/", status_code=302)
     set_auth_cookie(resp, token)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -1473,7 +1485,7 @@ async def register_post(
 
     # Auto-login: issue JWT and redirect to dashboard
     token = create_access_token(new_user_id, new_user.username, new_user.role)
-    resp = RedirectResponse("/dashboard", status_code=302)
+    resp = RedirectResponse("/", status_code=302)
     set_auth_cookie(resp, token)
     resp.headers["Cache-Control"] = "no-store"
     return resp

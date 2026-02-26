@@ -76,7 +76,15 @@ run-api: ## Start the API server  (walk phase)
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
 
-.PHONY: clean
+.PHONY: clean kill-api
+
+kill-api: ## Kill any running API server on port 8000
+	@pid=$$(lsof -ti :8000 2>/dev/null || ss -tlnp 2>/dev/null | grep ':8000 ' | sed -n 's/.*pid=\([0-9]*\).*/\1/p'); \
+	if [ -n "$$pid" ]; then \
+		kill $$pid && echo "  Killed PID $$pid on port 8000"; \
+	else \
+		echo "  No process found on port 8000"; \
+	fi
 
 clean: ## Remove build artifacts, cache files, and compiled bytecode
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
