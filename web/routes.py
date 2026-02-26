@@ -53,7 +53,7 @@ from sqlalchemy.exc import IntegrityError
 from auth.dependencies import try_get_current_user
 from auth.oauth import get_enabled_providers, get_oauth_user_info
 from auth.store import UserStore
-from auth.tokens import authenticate_user, create_access_token, hash_password, set_auth_cookie
+from auth.tokens import authenticate_user, create_access_token, get_session_duration, hash_password, set_auth_cookie
 from cmdb.ingest import parse_csv, parse_grype_json, parse_nessus_csv, parse_trivy_json
 from cmdb.models import Asset, AssetVulnerability
 from cmdb.store import CMDBStore, apply_criticality_modifier
@@ -1148,10 +1148,11 @@ async def oauth_callback(request: Request, provider: str) -> RedirectResponse:
         return RedirectResponse("/login?error=account_disabled", status_code=302)
 
     # Step 6: Issue JWT, set cookie, redirect
-    token_str = create_access_token(user.id, user.username, user.role)
+    duration = get_session_duration(user.user_preferences)
+    token_str = create_access_token(user.id, user.username, user.role, expire_seconds=duration)
     next_url = _safe_next(request.query_params.get("next"))  # [C2]
     resp = RedirectResponse(next_url, status_code=302)
-    set_auth_cookie(resp, token_str)
+    set_auth_cookie(resp, token_str, expire_seconds=duration)
     resp.headers["Cache-Control"] = "no-store"  # [M5]
     return resp
 
@@ -1198,10 +1199,11 @@ async def login_post(
     if user is None:
         return RedirectResponse("/login?error=bad_credentials", status_code=302)
 
-    token = create_access_token(user.id, user.username, user.role)
+    duration = get_session_duration(user.user_preferences)
+    token = create_access_token(user.id, user.username, user.role, expire_seconds=duration)
     next_url = _safe_next(request.query_params.get("next"))  # [C2]
     resp = RedirectResponse(next_url, status_code=302)
-    set_auth_cookie(resp, token)
+    set_auth_cookie(resp, token, expire_seconds=duration)
     resp.headers["Cache-Control"] = "no-store"  # [M5]
     return resp
 

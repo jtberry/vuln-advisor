@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -133,6 +135,41 @@ def decode_access_token(token: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Per-user session duration
+# ---------------------------------------------------------------------------
+
+_VALID_SESSION_DURATIONS: set = {3600, 14400, 28800}  # 1h, 4h, 8h in seconds
+
+
+def get_session_duration(user_preferences: str | None) -> int:
+    """Return session duration in seconds from user preferences JSON.
+
+    Validates against a whitelist of allowed durations: 1h (3600), 4h (14400),
+    8h (28800). Any other value -- including garbage JSON, missing field, or an
+    unexpected number -- returns the safe default of 1 hour.
+
+    The whitelist is intentional security: user-supplied JSON must not be able
+    to set an arbitrarily long (or zero/negative) session lifetime.
+
+    Args:
+        user_preferences: JSON string from User.user_preferences, or None.
+
+    Returns:
+        Session duration in seconds (one of 3600, 14400, 28800).
+    """
+    if not user_preferences:
+        return 3600
+    try:
+        prefs = json.loads(user_preferences)
+    except (json.JSONDecodeError, TypeError):
+        return 3600
+    duration = prefs.get("session_duration", 3600)
+    if duration not in _VALID_SESSION_DURATIONS:
+        return 3600
+    return duration
+
+
+# ---------------------------------------------------------------------------
 # User authentication (constant-time) [C1]
 # ---------------------------------------------------------------------------
 
@@ -194,13 +231,20 @@ def hash_api_key(raw_key: str) -> str:
 
 
 def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
-    """Write the JWT access token as an httpOnly cookie on the response.
+    """Write the JWT access token as an httpOnly cookie, plus a JS-readable expiry cookie.
 
-    httponly=True: JS cannot read the cookie (XSS mitigation).
-    samesite="lax": cookie sent on same-site navigations and GET cross-site
-        links, but not on cross-site POST -- CSRF mitigation for most cases.
-    secure: only sent over HTTPS when SECURE_COOKIES=true (set in production).
-    max_age: matches the JWT expiry so both expire together.
+    Sets two cookies:
+      access_token (httpOnly=True): The JWT itself. JS cannot read this cookie,
+          which mitigates XSS token theft -- an attacker's injected script cannot
+          exfiltrate the token even if it runs in the page context.
+
+      session_expires_at (httpOnly=False): A Unix timestamp (seconds) marking
+          when the session expires. JS reads this to schedule the session-expiry
+          modal without polling the server. It contains ONLY a timestamp -- no
+          user data, no token material -- so exposing it to JS is safe.
+
+    Both cookies share the same max_age so they expire together. samesite="lax"
+    provides CSRF mitigation for cross-site POST requests.
 
     Args:
         response:       FastAPI/Starlette response object.
@@ -211,10 +255,24 @@ def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
                         token expiry in sync.
     """
     duration = expire_seconds if expire_seconds > 0 else _settings.token_expire_seconds
+
+    # httpOnly auth cookie -- JS cannot read (XSS mitigation)
     response.set_cookie(
         "access_token",
         value=token,
         httponly=True,
+        samesite="lax",
+        secure=_settings.secure_cookies,
+        max_age=duration,
+    )
+
+    # JS-readable expiry timestamp -- NOT httpOnly (required for modal timer)
+    # Contains only a Unix timestamp, no sensitive data.
+    expires_at = int(time.time()) + duration
+    response.set_cookie(
+        "session_expires_at",
+        value=str(expires_at),
+        httponly=False,  # JS must read this to schedule the session-expiry modal
         samesite="lax",
         secure=_settings.secure_cookies,
         max_age=duration,
