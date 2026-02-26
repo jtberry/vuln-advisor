@@ -32,6 +32,11 @@ from api.models import (
 )
 from core.pipeline import process_cve
 
+# Auth policy:
+# - GET  /api/v1/cve/summary: public -- CVE lookup is the free, unauthenticated feature
+# - POST /api/v1/cve/bulk:    public -- same rationale; bulk triage is core tool value
+# - GET  /api/v1/cve/{cve_id}: public -- individual CVE detail is also free
+# No auth dependency on this router by design.
 router = APIRouter()
 
 

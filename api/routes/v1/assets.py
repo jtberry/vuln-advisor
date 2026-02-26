@@ -43,9 +43,14 @@ from cmdb.models import Asset, AssetVulnerability
 from cmdb.store import CMDBStore, apply_criticality_modifier
 from core.pipeline import process_cves
 
-# All asset and ingest routes require authentication.
-# Router-level dependency applies to every route registered on this router,
-# so individual handlers don't each need to repeat Depends(get_current_user).
+# Auth policy:
+# - POST   /api/v1/assets:                            requires auth (write operation)
+# - GET    /api/v1/assets:                            requires auth (CMDB data is internal)
+# - POST   /api/v1/ingest:                            requires auth (write operation)
+# - GET    /api/v1/assets/{asset_id}:                 requires auth (CMDB data is internal)
+# - POST   /api/v1/assets/{asset_id}/vulnerabilities: requires auth (write operation)
+# - PATCH  /api/v1/assets/{asset_id}/vulnerabilities/{cve_id}/status: requires auth (write)
+# Router-level dependency enforces auth on all routes; individual handlers do not repeat it.
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 _MAX_UPLOAD_BYTES = 1 * 1024 * 1024  # 1 MB

@@ -16,6 +16,9 @@ from api.models import DashboardResponse
 from auth.dependencies import get_current_user
 from cmdb.store import CMDBStore
 
+# Auth policy:
+# - GET /api/v1/dashboard: requires auth -- aggregated CMDB metrics are internal data
+# Router-level dependency enforces auth; the single handler does not repeat it.
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 

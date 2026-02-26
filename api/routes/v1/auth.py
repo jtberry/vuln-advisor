@@ -52,6 +52,17 @@ from auth.tokens import (
     set_auth_cookie,
 )
 
+# Auth policy:
+# - POST   /api/v1/auth/login:           public -- login endpoint must be unauthenticated
+# - POST   /api/v1/auth/logout:          public -- clearing a cookie needs no prior auth
+# - GET    /api/v1/auth/providers:       public -- login page calls this to render OAuth buttons
+# - GET    /api/v1/auth/me:              requires auth (get_current_user)
+# - POST   /api/v1/auth/api-keys:        requires auth (get_current_user)
+# - GET    /api/v1/auth/api-keys:        requires auth (get_current_user)
+# - DELETE /api/v1/auth/api-keys/{id}:   requires auth + ownership check in store
+# - POST   /api/v1/auth/users:           requires admin (require_admin)
+# - GET    /api/v1/auth/users:           requires admin (require_admin)
+# - PATCH  /api/v1/auth/users/{id}:      requires admin (require_admin)
 router = APIRouter()
 
 
