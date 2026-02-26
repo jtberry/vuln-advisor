@@ -73,7 +73,7 @@ Plans:
 Plans:
 - [ ] 03-01-PLAN.md -- SLA defaults update, configurable SLA settings, CMDB overdue/threat intel queries
 - [ ] 03-02-PLAN.md -- Dashboard chart, KEV stat card, threat intel section, overdue SLA list
-- [ ] 03-03-PLAN.md -- Asset detail status modal, optimistic UI, bulk status change
+- [x] 03-03-PLAN.md -- Asset detail status modal, optimistic UI, bulk status change
 
 ### Phase 4: UI Polish
 **Goal**: Navigation, empty states, and overall layout are consistent and usable enough to make daily use feel natural
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Auth & Foundation | 8/8 | Complete   | 2026-02-26 |
 | 2. Data Layer | 2/2 | Complete   | 2026-02-26 |
-| 3. Dashboard & Charts | 0/3 | Not started | - |
+| 3. Dashboard & Charts | 2/4 | In Progress|  |
 | 4. UI Polish | 0/TBD | Not started | - |
 | 5. Test Coverage | 0/TBD | Not started | - |
 | 6. Containerization | 0/TBD | Not started | - |

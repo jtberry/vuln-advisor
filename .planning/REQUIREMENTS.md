@@ -28,8 +28,8 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 
 - [x] **STAT-01**: Existing status workflow features are audited and tested end-to-end
 - [x] **STAT-02**: PATCH endpoint for asset and vulnerability updates works correctly
-- [ ] **STAT-03**: User can change vulnerability status from asset detail page (Open -> In Review -> Remediated -> Closed/Deferred)
-- [ ] **STAT-04**: End-to-end triage-to-remediation workflow is connected and usable in UI
+- [x] **STAT-03**: User can change vulnerability status from asset detail page (Open -> In Review -> Remediated -> Closed/Deferred)
+- [x] **STAT-04**: End-to-end triage-to-remediation workflow is connected and usable in UI
 
 ### Dashboard & Charts
 
@@ -110,8 +110,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-02 | Phase 3 | Pending |
 | DASH-03 | Phase 3 | Pending |
 | DASH-04 | Phase 3 | Pending |
-| STAT-03 | Phase 3 | Pending |
-| STAT-04 | Phase 3 | Pending |
+| STAT-03 | Phase 3 | Complete |
+| STAT-04 | Phase 3 | Complete |
 | UIPL-01 | Phase 4 | Pending |
 | UIPL-02 | Phase 4 | Pending |
 | UIPL-03 | Phase 4 | Pending |
