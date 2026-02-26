@@ -77,44 +77,58 @@
 <body>
 
 <nav class="navbar navbar-expand-lg px-4">
-  <a class="navbar-brand fw-bold me-4" href="/" style="font-size: 1.1rem">
+  {% set current_user = try_get_current_user(request) %}
+  <a class="navbar-brand fw-bold me-4" href="{% if current_user %}/{% else %}/cve{% endif %}" style="font-size: 1.1rem">
     <span style="color: #388bfd">Vuln</span><span style="color: #c9d1d9">Advisor</span>
   </a>
   <ul class="navbar-nav me-auto">
     <li class="nav-item">
-      <a class="nav-link {% if request.url.path == '/' %}text-light{% else %}text-secondary{% endif %}"
-         href="/">Dashboard</a>
+      <a class="nav-link {% if request.url.path.startswith('/cve') %}active text-light{% else %}text-secondary{% endif %}"
+         href="/cve"
+         {% if request.url.path.startswith('/cve') %}aria-current="page"{% endif %}>CVE Search</a>
+    </li>
+    {% if current_user %}
+    <li class="nav-item">
+      <a class="nav-link {% if request.url.path == '/' %}active text-light{% else %}text-secondary{% endif %}"
+         href="/"
+         {% if request.url.path == '/' %}aria-current="page"{% endif %}>Dashboard</a>
     </li>
     <li class="nav-item">
-      <a class="nav-link {% if request.url.path.startswith('/cve') %}text-light{% else %}text-secondary{% endif %}"
-         href="/cve">CVE Research</a>
+      <a class="nav-link {% if request.url.path.startswith('/assets') %}active text-light{% else %}text-secondary{% endif %}"
+         href="/assets"
+         {% if request.url.path.startswith('/assets') %}aria-current="page"{% endif %}>Assets</a>
     </li>
     <li class="nav-item">
-      <a class="nav-link {% if request.url.path == '/ingest' %}text-light{% else %}text-secondary{% endif %}"
-         href="/ingest">Ingest</a>
+      <a class="nav-link {% if request.url.path == '/ingest' %}active text-light{% else %}text-secondary{% endif %}"
+         href="/ingest"
+         {% if request.url.path == '/ingest' %}aria-current="page"{% endif %}>Ingest</a>
     </li>
+    {% endif %}
   </ul>
-  <ul class="navbar-nav ms-auto align-items-center gap-2">
+  <ul class="navbar-nav ms-auto align-items-center">
     <li class="nav-item">
       <a class="nav-link text-secondary" href="/docs" style="font-size: 0.85rem">API Docs</a>
     </li>
-    {% set current_user = try_get_current_user(request) %}
     {% if current_user %}
-      <li class="nav-item d-flex align-items-center gap-2">
-        <span class="text-secondary" style="font-size: 0.85rem">{{ current_user.username }}</span>
-        <span class="badge
-          {% if current_user.role == 'admin' %}bg-danger
-          {% elif current_user.role == 'analyst' %}bg-primary
-          {% else %}bg-secondary{% endif %}
-          " style="font-size: 0.7rem">{{ current_user.role }}</span>
-      </li>
-      <li class="nav-item">
-        <a href="/logout" class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">Logout</a>
-      </li>
+    <li class="nav-item dropdown ms-2">
+      <a class="nav-link dropdown-toggle text-secondary" href="#" role="button"
+         data-bs-toggle="dropdown" aria-expanded="false">
+        {{ current_user.username }}
+        {% if current_user.role == 'admin' %}
+          <span class="badge bg-danger ms-1" style="font-size: 0.65rem">Admin</span>
+        {% endif %}
+      </a>
+      <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark">
+        <li><a class="dropdown-item" href="/settings">Settings</a></li>
+        <li><a class="dropdown-item" href="/api-keys">API Keys</a></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="/logout">Logout</a></li>
+      </ul>
+    </li>
     {% else %}
-      <li class="nav-item">
-        <a class="nav-link text-secondary" href="/login" style="font-size: 0.85rem">Login</a>
-      </li>
+    <li class="nav-item ms-2">
+      <a class="nav-link" href="/login">Log In</a>
+    </li>
     {% endif %}
   </ul>
 </nav>
