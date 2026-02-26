@@ -29,7 +29,7 @@ Routes:
   GET  /login/callback/{provider}                     -- OAuth callback handler
   GET  /login                                         -- login form
   POST /login                                         -- handle password login
-  POST /logout                                        -- clear cookie, redirect /login
+  GET  /logout                                         -- clear cookie, redirect /login (GET; see Plan 02 trade-off)
   GET  /setup                                         -- first-run wizard
   POST /setup                                         -- create first admin
 """
@@ -41,9 +41,11 @@ from pathlib import Path
 from typing import Optional
 
 from authlib.integrations.starlette_client import OAuthError
-from fastapi import APIRouter, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from fastapi_csrf_protect import CsrfProtect
+from fastapi_csrf_protect.exceptions import CsrfProtectError  # noqa: F401 -- re-exported for api/main.py handler
 from sqlalchemy.exc import IntegrityError
 
 from auth.dependencies import try_get_current_user
@@ -65,6 +67,31 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # context (always present) and returns the User or None.
 templates.env.globals["try_get_current_user"] = try_get_current_user
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# CSRF protection
+#
+# fastapi-csrf-protect uses the Double Submit Cookie pattern:
+#   1. GET route generates two tokens: a signed cookie token and a plain form token.
+#   2. The plain token is embedded as a hidden input in the form.
+#   3. POST route calls validate_csrf() which checks that the cookie and form token match.
+#
+# An attacker can forge a POST but cannot read or set the site's cookies
+# (same-origin cookie policy), so they cannot forge a matching token pair.
+#
+# The import inside get_csrf_config() is intentional -- it avoids a circular import
+# and ensures settings are loaded lazily at first use, not at module import time.
+# (See Pitfall 2 in RESEARCH.md)
+# ---------------------------------------------------------------------------
+
+
+@CsrfProtect.load_config
+def get_csrf_config() -> list[tuple[str, str]]:
+    """Provide the SECRET_KEY to fastapi-csrf-protect from centralized settings."""
+    from core.config import get_settings
+
+    return [("secret_key", get_settings().secret_key)]
+
 
 # ---------------------------------------------------------------------------
 # Auth helpers
@@ -1083,7 +1110,7 @@ async def oauth_callback(request: Request, provider: str) -> RedirectResponse:
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(request: Request) -> HTMLResponse:
+def login_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()) -> HTMLResponse:
     """Render the login page with username/password form and OAuth buttons."""
     # Redirect already-authenticated users to /
     if try_get_current_user(request) is not None:
@@ -1091,24 +1118,33 @@ def login_form(request: Request) -> HTMLResponse:
 
     # Map ?error= query param through whitelist [M3]
     error_msg = _ERROR_MESSAGES.get(request.query_params.get("error", ""), None)
+    # Pop any flash set by the CSRF error handler (e.g. tampered token on a previous submit)
+    flash_message = request.session.pop("flash", None)
     providers = get_enabled_providers()
-    return templates.TemplateResponse(
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    resp = templates.TemplateResponse(
         "login.html",
         {
             "request": request,
             "error_msg": error_msg,
+            "flash_message": flash_message,
             "providers": providers,
+            "csrf_token": csrf_token,
         },
     )
+    csrf_protect.set_csrf_cookie(signed_token, resp)
+    return resp
 
 
 @router.post("/login", response_class=HTMLResponse)
-def login_post(
+async def login_post(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
 ) -> RedirectResponse:
     """Handle username/password login form submission."""
+    await csrf_protect.validate_csrf(request)
     user_store: UserStore = request.app.state.user_store
     user = authenticate_user(user_store, username, password)  # [C1] timing equalization
     if user is None:
@@ -1122,36 +1158,51 @@ def login_post(
     return resp
 
 
-@router.post("/logout")
+@router.get("/logout")
 def logout(request: Request) -> RedirectResponse:
-    """Clear the JWT cookie and redirect to the login page."""
+    """Clear the JWT cookie and redirect to the login page.
+
+    Uses GET (not POST) to avoid the need for a CSRF token in every page's template
+    context. Security trade-off: GET /logout can be triggered by a malicious link
+    (e.g. <img src='/logout'>), but clearing the session cookie exposes no sensitive
+    data -- the user simply re-authenticates. Acceptable for a solo-analyst tool.
+    See Plan 02 RESEARCH.md Pitfall 1 for the full trade-off analysis.
+    """
     resp = RedirectResponse("/login", status_code=302)
     resp.delete_cookie("access_token")
     return resp
 
 
 @router.get("/setup", response_class=HTMLResponse)
-def setup_form(request: Request) -> HTMLResponse:
+def setup_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()) -> HTMLResponse:
     """Render the first-run setup wizard.
 
-    Returns 404 after the first admin account has been created. The setup
-    redirect middleware also enforces this by only redirecting when
-    setup_required is True -- once False, this page becomes inaccessible
-    via normal navigation. Returning 404 (not redirect) prevents any ambiguity.
+    Redirects to /login after the first admin account has been created (per
+    user decision in CONTEXT.md: silently redirect to /login, not 404).
     """
     if not getattr(request.app.state, "setup_required", True):
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404)
-    return templates.TemplateResponse("setup.html", {"request": request})
+        return RedirectResponse("/login", status_code=302)
+    flash_message = request.session.pop("flash", None)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    resp = templates.TemplateResponse(
+        "setup.html",
+        {
+            "request": request,
+            "flash_message": flash_message,
+            "csrf_token": csrf_token,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, resp)
+    return resp
 
 
 @router.post("/setup", response_class=HTMLResponse)
-def setup_post(
+async def setup_post(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
 ) -> RedirectResponse:
     """Create the first admin account.
 
@@ -1160,6 +1211,8 @@ def setup_post(
     could both pass the middleware check before either creates a user. The DB-
     level check and IntegrityError catch ensure only one wins.
     """
+    await csrf_protect.validate_csrf(request)
+
     from sqlalchemy.exc import IntegrityError
 
     user_store: UserStore = request.app.state.user_store

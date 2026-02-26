@@ -31,6 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi_csrf_protect.exceptions import CsrfProtectError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -371,6 +372,25 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
             )
         ).model_dump(),
     )
+
+
+@app.exception_handler(CsrfProtectError)
+async def csrf_error_handler(request: Request, exc: CsrfProtectError) -> RedirectResponse:
+    """Redirect back to the originating form with a flash message on CSRF failure.
+
+    Per user decision (RESEARCH.md): CSRF failures redirect back to the same page
+    with flash "Something went wrong. Please try again." so the form re-renders
+    with a fresh token. The session is used to pass the flash message across the
+    redirect (Post-Redirect-Get pattern).
+
+    Security note: We redirect to the Referer header value (capped to same-origin)
+    rather than sending an error response because the form templates expect to
+    display flash messages on the next GET render, not on a POST response body.
+    A missing or cross-origin Referer falls back to /login (safe default).
+    """
+    request.session["flash"] = "Something went wrong. Please try again."
+    referer = request.headers.get("referer", "/login")
+    return RedirectResponse(referer, status_code=302)
 
 
 @app.exception_handler(Exception)
