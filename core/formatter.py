@@ -306,6 +306,42 @@ def to_json(cve: EnrichedCVE) -> str:
 # CSV export
 # ---------------------------------------------------------------------------
 
+# Characters that cause spreadsheet applications (Excel, LibreOffice, Google
+# Sheets) to interpret a cell as a formula when they appear as the first
+# character. Defined as a module-level constant so _sanitize_csv_cell() and
+# tests can reference it directly without coupling to the function body.
+#
+# Reference: OWASP "CSV Injection" (CWE-1236)
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    """Prefix dangerous formula-triggering characters with a tab character.
+
+    Spreadsheet applications interpret cells starting with =, +, -, or @ as
+    formulas. Tab-prefixing forces the cell to be treated as text, neutralizing
+    the injection vector without altering the visible content after the leading
+    whitespace is displayed.
+
+    This is the OWASP-recommended tab-prefix approach rather than single-quote
+    prefix, because tab is universally handled across Excel, LibreOffice, and
+    Google Sheets, while single-quote behavior varies by application.
+
+    Args:
+        value: The cell string to sanitize.
+
+    Returns:
+        The original value unchanged if it does not start with a formula
+        prefix, or the value prefixed with a tab character if it does.
+
+    NOTE: If description or other free-text fields are added to CSV columns,
+    sanitize them too. Currently only remediation_summary is free-text in
+    to_csv() output.
+    """
+    if value and value[0] in _FORMULA_PREFIXES:
+        return "\t" + value
+    return value
+
 
 def to_csv(results: list) -> str:
     """Render a list of EnrichedCVE as CSV.
@@ -343,6 +379,7 @@ def to_csv(results: list) -> str:
         elif r.remediation:
             remediation_summary = r.remediation[0].description
         remediation_summary = remediation_summary[:120]
+        remediation_summary = _sanitize_csv_cell(remediation_summary)
 
         writer.writerow(
             [
