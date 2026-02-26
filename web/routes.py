@@ -7,19 +7,21 @@ routes (same CMDB store, cache, KEV set) but return HTML instead of JSON.
 Route registration order matters. FastAPI resolves same-level paths in order:
   - GET /cve and POST /cve/lookup and POST /cve/bulk must be registered
     before GET /cve/{cve_id} or FastAPI captures "lookup"/"bulk" as path params.
-  - GET /assets/new and POST /assets must be registered before GET /assets/{asset_id}
-    or FastAPI captures "new" as a path parameter.
+  - GET /assets/new, POST /assets, and GET /assets must be registered before
+    GET /assets/{asset_id} or FastAPI captures "new"/bare-path as path params.
   - GET /login/oauth/{provider} and GET /login/callback/{provider} must be
     registered before GET /login or FastAPI may misroute them.
 
 Routes:
   GET  /                                              -- risk dashboard (auth required)
+  GET  /dashboard                                     -- 301 redirect to / (bookmarks / nav compat)
   GET  /cve                                           -- CVE research page
   POST /cve/lookup                                    -- HTMX: single CVE card
   POST /cve/bulk                                      -- HTMX: bulk results table
   GET  /cve/{cve_id}                                  -- full CVE detail
   GET  /assets/new                                    -- asset creation form (auth required)
   POST /assets                                        -- handle creation, redirect to /assets/{id}
+  GET  /assets                                        -- asset list (auth required)
   GET  /assets/{asset_id}                             -- asset detail (auth required)
   POST /assets/{asset_id}/vulnerabilities             -- HTMX: add CVEs, return updated tbody
   POST /assets/{asset_id}/vulnerabilities/{cve}/status -- HTMX: row update
@@ -189,12 +191,27 @@ def _require_auth(request: Request) -> Optional[RedirectResponse]:
     Call at the top of protected route handlers:
         if redirect := _require_auth(request):
             return redirect
+
+    Distinguishes two unauthenticated states:
+      - Session expired: session_expires_at cookie is still present (the
+        access_token expired but the longer-lived companion cookie hasn't).
+        Redirects to /login?expired=1 with an expiry-specific flash message
+        and cleans up the stale session_expires_at cookie.
+      - Never logged in: no session_expires_at cookie at all.
+        Redirects to /login with the standard "please log in" message.
     """
     user = try_get_current_user(request)
     if user is None:
-        request.session["flash"] = "Please log in to access this page."
         path = request.url.path
-        return RedirectResponse(f"/login?next={path}", status_code=302)
+        has_expired_session = request.cookies.get("session_expires_at") is not None
+        if has_expired_session:
+            request.session["flash"] = "Your session has expired. Please log in again."
+            resp = RedirectResponse(f"/login?next={path}&expired=1", status_code=302)
+            resp.delete_cookie("session_expires_at")
+            return resp
+        else:
+            request.session["flash"] = "Please log in to access this page."
+            return RedirectResponse(f"/login?next={path}", status_code=302)
     return None
 
 
@@ -336,6 +353,22 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
             "flash_message": _get_flash(request),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /dashboard -- permanent redirect to / for bookmarks and typed URLs
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+def dashboard_redirect(request: Request) -> RedirectResponse:
+    """Redirect /dashboard to / permanently.
+
+    /dashboard has never been its own page -- the real dashboard lives at /.
+    A 301 (permanent) redirect is appropriate here so browsers and bookmarks
+    update their stored URL to /, minimising future round-trips.
+    """
+    return RedirectResponse("/", status_code=301)
 
 
 # ---------------------------------------------------------------------------
@@ -617,6 +650,32 @@ async def asset_create(
         )
 
     return RedirectResponse(f"/assets/{asset_id}", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# GET /assets -- asset list (MUST precede /assets/{asset_id})
+# ---------------------------------------------------------------------------
+
+
+@router.get("/assets", response_class=HTMLResponse)
+def asset_list(request: Request) -> HTMLResponse:
+    """Render a table of all registered assets.
+
+    Registered before GET /assets/{asset_id} so the bare /assets path is not
+    captured as a path parameter named asset_id.
+    """
+    if redirect := _require_auth(request):
+        return redirect
+    cmdb: CMDBStore = request.app.state.cmdb
+    assets = cmdb.list_assets()
+    return templates.TemplateResponse(
+        "assets_list.html",
+        {
+            "request": request,
+            "assets": assets,
+            "flash_message": _get_flash(request),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

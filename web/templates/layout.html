@@ -216,6 +216,27 @@
       // Schedule the modal to appear at the exact moment the session expires
       setTimeout(showSessionModal, remaining * 1000);
     }
+
+    // Safety-net poll: check every 5 seconds whether session has expired.
+    // This catches cases where the setTimeout timer drifts or where the page
+    // was backgrounded (browsers throttle timers in background tabs).
+    //
+    // Why check session_expires_at instead of access_token? access_token is
+    // httpOnly -- JS cannot read it via document.cookie. session_expires_at is
+    // explicitly non-httpOnly and contains the Unix timestamp of when the
+    // session expires, so we compare it against the current time.
+    var pollId = setInterval(function () {
+      var m = document.cookie.match(/session_expires_at=(\d+)/);
+      if (!m) {
+        // Cookie gone (clean logout or never logged in) -- stop polling
+        clearInterval(pollId);
+        return;
+      }
+      if (parseInt(m[1], 10) <= Math.floor(Date.now() / 1000)) {
+        clearInterval(pollId);
+        showSessionModal();
+      }
+    }, 5000);
   })();
   </script>
 {% endif %}

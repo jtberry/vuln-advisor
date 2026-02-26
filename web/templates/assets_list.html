@@ -1,0 +1,90 @@
+{% extends "layout.html" %}
+{% block title %}Assets — VulnAdvisor{% endblock %}
+
+{% block content %}
+
+{# ── Page header ─────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h5 class="fw-bold mb-0" style="color: #e6edf3">Assets</h5>
+  <a href="/assets/new"
+     class="btn btn-primary btn-sm"
+     style="font-size: 0.82rem">
+    Register Asset
+  </a>
+</div>
+
+{# ── Flash message ───────────────────────────────────────────────── #}
+{% if flash_message %}
+<div class="alert py-2 px-3 mb-4"
+     style="font-size: 0.85rem; border-color: #388bfd; background-color: rgba(56,139,253,0.1); color: #79c0ff">
+  {{ flash_message }}
+</div>
+{% endif %}
+
+{# ── Asset table ─────────────────────────────────────────────────── #}
+{% if assets %}
+<div class="card">
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="padding-left: 1rem; min-width: 200px">Hostname</th>
+          <th>IP</th>
+          <th>Environment</th>
+          <th>Exposure</th>
+          <th>Criticality</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in assets %}
+        <tr>
+          <td style="padding-left: 1rem">
+            <a href="/assets/{{ asset.id }}"
+               class="fw-semibold font-mono text-decoration-none"
+               style="color: #58a6ff; font-size: 0.88rem">
+              {{ asset.hostname }}
+            </a>
+          </td>
+          <td>
+            {% if asset.ip %}
+            <span class="font-mono text-muted" style="font-size: 0.82rem">{{ asset.ip }}</span>
+            {% else %}
+            <span class="text-muted" style="font-size: 0.82rem">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge" style="background-color: #21262d; color: #8b949e">
+              {{ asset.environment.upper() }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-exp-{{ asset.exposure }}">
+              {{ asset.exposure.upper() }}
+            </span>
+          </td>
+          <td>
+            <span class="badge badge-crit-{{ asset.criticality }}">
+              {{ asset.criticality.upper() }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+{# ── Empty state ──────────────────────────────────────────────────── #}
+<div class="card">
+  <div class="card-body text-center py-5">
+    <div class="text-muted mb-2">No assets registered yet.</div>
+    <div style="font-size: 0.82rem; color: #484f58">
+      <a href="/assets/new" class="text-decoration-none" style="color: #58a6ff">Register your first asset</a>
+      to start tracking vulnerabilities.
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
