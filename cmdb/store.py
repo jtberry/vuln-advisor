@@ -18,7 +18,7 @@ Usage:
     asset_id = store.create_asset(asset)
     store.create_asset_vuln(vuln)
     assets = store.list_assets()
-    store.update_vuln_status(vuln_id, "in_progress", owner="alice")
+    store.update_vuln_status(vuln_id, "in_review", from_status="open", owner="alice")
     store.close()
 """
 
@@ -84,7 +84,7 @@ _asset_vulns = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("asset_id", Integer, nullable=False),
     Column("cve_id", String(30), nullable=False),
-    Column("status", String(30), nullable=False, server_default="pending"),
+    Column("status", String(30), nullable=False, server_default="open"),
     Column("base_priority", String(5)),
     Column("effective_priority", String(5)),
     Column("discovered_at", String(32), nullable=False),
@@ -104,6 +104,7 @@ _remediation = Table(
     Column("owner", String(255)),
     Column("evidence", Text),
     Column("updated_at", String(32), nullable=False),
+    Column("is_regression", Integer, server_default="0"),  # boolean stored as 0/1
 )
 
 
@@ -185,6 +186,73 @@ def _migrate_vulns_table(conn) -> None:
     conn.commit()
 
 
+def _migrate_remediation_table(conn) -> None:
+    """Add is_regression column to existing remediation_records table."""
+    existing = {row[1] for row in conn.execute(text("PRAGMA table_info(remediation_records)"))}
+    additions = [
+        ("is_regression", "INTEGER DEFAULT 0"),
+    ]
+    for col, typ in additions:
+        if col not in existing:
+            conn.execute(text(f"ALTER TABLE remediation_records ADD COLUMN {col} {typ}"))  # nosemgrep
+    conn.commit()
+
+
+def _migrate_status_values(conn) -> None:
+    """Rename old status values to analyst-friendly names.
+
+    One-time migration. Safe to re-run (UPDATE WHERE old_value is a no-op
+    when no rows match).
+
+    pending     -> open
+    in_progress -> in_review
+    verified    -> remediated
+    """
+    renames = [
+        ("pending", "open"),
+        ("in_progress", "in_review"),
+        ("verified", "remediated"),
+    ]
+    for old, new in renames:
+        conn.execute(_asset_vulns.update().where(_asset_vulns.c.status == old).values(status=new))
+        conn.execute(_remediation.update().where(_remediation.c.status == old).values(status=new))
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Status workflow
+# ---------------------------------------------------------------------------
+
+# Forward order defines "progress" direction. Higher index = more progressed.
+# deferred is intentionally omitted -- it is a terminal exit, not part of the
+# linear chain, and transitioning TO deferred is never a regression.
+_STATUS_ORDER: dict[str, int] = {
+    "open": 0,
+    "in_review": 1,
+    "remediated": 2,
+    "closed": 3,
+}
+
+_TERMINAL_STATUSES = {"closed", "deferred"}
+
+
+def _is_regression(from_status: str, to_status: str) -> bool:
+    """Return True if this transition moves backwards in the workflow.
+
+    Transitions TO deferred are never regressions -- deferred is a valid
+    exit from any active state.
+    Transitions FROM a terminal state to a non-terminal state are always
+    regressions (re-opening a closed or deferred item).
+    """
+    if to_status == "deferred":
+        return False
+    if from_status in _TERMINAL_STATUSES:
+        return True
+    from_idx = _STATUS_ORDER.get(from_status, -1)
+    to_idx = _STATUS_ORDER.get(to_status, -1)
+    return to_idx < from_idx
+
+
 # ---------------------------------------------------------------------------
 # WAL mode
 # ---------------------------------------------------------------------------
@@ -220,6 +288,8 @@ class CMDBStore:
         with self.engine.connect() as conn:
             _migrate_assets_table(conn)
             _migrate_vulns_table(conn)
+            _migrate_remediation_table(conn)
+            _migrate_status_values(conn)
 
     # ------------------------------------------------------------------
     # Assets
@@ -338,15 +408,17 @@ class CMDBStore:
         self,
         vuln_id: int,
         status: str,
+        from_status: str = "",
         owner: Optional[str] = None,
         evidence: Optional[str] = None,
-    ) -> bool:
+    ) -> tuple:
         """Update status on an AssetVulnerability and write an audit record.
 
-        Returns True if a row was updated, False if vuln_id was not found.
-        The RemediationRecord is the audit entry -- it is always written when
-        a status change succeeds, building an immutable history.
+        Returns (updated, is_regression).
+        Caller supplies from_status (current status before change) to avoid
+        a second DB round-trip inside the transaction.
         """
+        regression = _is_regression(from_status, status) if from_status else False
         now = _now_iso()
         with self.engine.connect() as conn:
             result = conn.execute(
@@ -356,7 +428,7 @@ class CMDBStore:
             )
             if result.rowcount == 0:
                 conn.commit()
-                return False
+                return False, False
             conn.execute(
                 _remediation.insert().values(
                     asset_vuln_id=vuln_id,
@@ -364,10 +436,11 @@ class CMDBStore:
                     owner=owner,
                     evidence=evidence,
                     updated_at=now,
+                    is_regression=1 if regression else 0,
                 )
             )
             conn.commit()
-        return True
+        return True, regression
 
     def get_priority_counts(self, asset_id: int) -> dict[str, int]:
         """Return open P1/P2/P3/P4 counts for a single asset (closed/deferred excluded)."""
@@ -450,6 +523,7 @@ class CMDBStore:
                 owner=r.owner,
                 evidence=r.evidence,
                 updated_at=r.updated_at,
+                is_regression=bool(getattr(r, "is_regression", 0)),
             )
             for r in rows
         ]
