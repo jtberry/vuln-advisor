@@ -383,13 +383,19 @@ async def csrf_error_handler(request: Request, exc: CsrfProtectError) -> Redirec
     with a fresh token. The session is used to pass the flash message across the
     redirect (Post-Redirect-Get pattern).
 
-    Security note: We redirect to the Referer header value (capped to same-origin)
-    rather than sending an error response because the form templates expect to
-    display flash messages on the next GET render, not on a POST response body.
-    A missing or cross-origin Referer falls back to /login (safe default).
+    Security note: We redirect to the Referer header value (validated as a
+    relative path) rather than sending an error response because the form
+    templates expect to display flash messages on the next GET render, not on a
+    POST response body. A missing, cross-origin, or protocol-relative Referer
+    falls back to /login (safe default).
     """
     request.session["flash"] = "Something went wrong. Please try again."
     referer = request.headers.get("referer", "/login")
+    # Validate same-origin: only allow relative paths. A cross-origin Referer
+    # (e.g. from a malicious form POST) would contain a scheme or netloc --
+    # reject those to prevent an open redirect after CSRF failure.
+    if referer and ("://" in referer or referer.startswith("//")):
+        referer = "/login"
     return RedirectResponse(referer, status_code=302)
 
 

@@ -75,8 +75,12 @@ python main.py CVE-2021-44228
 - [x] REST API layer (FastAPI) wrapping the core engine
 - [x] Exposure-aware triage (`--exposure internet/internal/isolated`)
 - [x] Export formats (CSV, HTML, Markdown)
-- [ ] Web UI for team use
-- [ ] Remediation tracking (open -> in progress -> resolved)
+- [x] Web UI with Bootstrap dark theme (login, dashboard, asset management, CVE research)
+- [x] Authentication (local accounts, OAuth with GitHub/Google, API keys, session management)
+- [x] Asset tracking and vulnerability ingest (CSV, Trivy, Grype, Nessus)
+- [ ] Dashboard charts and risk visualization
+- [ ] Remediation status workflow UI (open -> in review -> remediated -> closed)
+- [ ] Containerization (Docker, docker-compose, reverse proxy)
 - [ ] Jira / ServiceNow ticket creation
 - [ ] Team workspaces and shared reporting
 

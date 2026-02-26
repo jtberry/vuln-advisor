@@ -12,17 +12,36 @@ See `docs/architecture.md` for a full explanation of the design and every module
 
 ```
 main.py               CLI entry point (argparse)
-core/                 Engine — fetching, enrichment, triage, formatting
-  fetcher.py          All external HTTP calls — one function per source
+core/                 Engine -- fetching, enrichment, triage, formatting
+  config.py           Centralized settings (env vars, SECRET_KEY validation)
+  pipeline.py         Pure process_cve() + process_cves() -- shared by CLI and API
+  fetcher.py          All external HTTP calls -- one function per source
   enricher.py         Data processing, triage logic, CWE mapping
-  formatter.py        Terminal output and JSON rendering
-  models.py           Dataclasses only — no logic
-api/                  REST API layer — walk phase (FastAPI)
-  main.py             App entry point
+  formatter.py        Terminal + JSON + CSV/HTML/Markdown export
+  models.py           Dataclasses only -- no logic
+auth/                 Authentication layer -- consumed by api/ and web/
+  models.py           User and ApiKey dataclasses
+  store.py            UserStore -- SQLAlchemy Core, user/API key CRUD
+  tokens.py           JWT, bcrypt hashing, API key gen (HMAC-SHA256)
+  oauth.py            Authlib OAuth registry (GitHub, Google/OIDC)
+  dependencies.py     FastAPI Depends -- try_get_current_user, require_admin
+cmdb/                 Asset and vulnerability tracking
+  models.py           Asset, AssetVulnerability, RemediationRecord
+  store.py            CMDBStore -- SQLAlchemy Core, criticality modifiers
+  ingest.py           Scanner parsers -- CSV, Trivy, Grype, Nessus
+api/                  REST API layer (FastAPI)
+  main.py             App entry point, middleware, exception handlers
+  limiter.py          Shared slowapi rate limiter
+  models.py           Pydantic v2 request/response models
   routes/v1/cve.py    CVE lookup endpoints
-cache/                SQLite cache layer — walk phase
+  routes/v1/auth.py   Login, API keys, OAuth, admin user management
+  routes/v1/assets.py Asset CRUD, vulnerability ingest, status tracking
+  routes/v1/dashboard.py  Dashboard summary endpoint
+cache/                SQLite cache layer
   store.py            TTL-based cache for enriched CVE data
-web/                  Web UI — walk phase (templates)
+web/                  Web UI -- server-rendered Jinja2 templates
+  routes.py           All web routes (login, setup, dashboard, assets, etc.)
+  templates/          Bootstrap dark theme templates
 docs/                 Architecture and project structure reference
 ```
 
@@ -55,7 +74,7 @@ feature/*   Short-lived feature branches cut from develop.
 - Use built-in `list`, `dict`, `set` for type hints — not `typing.List`, `typing.Dict`, etc.
 - No dynamic imports unless explicitly justified
 - No hardcoded secrets, credentials, or API keys
-- Use `print()` for user-facing output — this is a CLI tool, not a service
+- Use `print()` for CLI output; use logging for API/web server output
 
 ---
 
