@@ -34,6 +34,7 @@ class CVECache:
     def __init__(self, db_path: Path = _DEFAULT_DB, ttl: int = _DEFAULT_TTL) -> None:
         self.ttl = ttl
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_DDL)
         self._conn.commit()
 

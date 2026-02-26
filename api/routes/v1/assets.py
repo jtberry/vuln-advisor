@@ -36,6 +36,8 @@ from api.models import (
     AssetVulnStatusUpdate,
     ErrorDetail,
     IngestResponse,
+    RemediationHistoryRow,
+    VulnStatusUpdateResponse,
 )
 from auth.dependencies import get_current_user
 from cmdb.ingest import IngestRecord, parse_csv, parse_grype_json, parse_nessus_csv, parse_trivy_json
@@ -117,9 +119,11 @@ def list_assets(request: Request) -> list[AssetSummaryRow]:
     """Return all registered assets with open vulnerability counts per priority."""
     cmdb: CMDBStore = request.app.state.cmdb
     assets = cmdb.list_assets()
+    all_counts = cmdb.get_all_asset_priority_counts()
+    zero = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
     rows = []
     for asset in assets:
-        counts = cmdb.get_priority_counts(asset.id)
+        counts = all_counts.get(asset.id, zero)
         rows.append(
             AssetSummaryRow(
                 id=asset.id,
@@ -395,7 +399,7 @@ def assign_vulnerabilities(
             AssetVulnRow(
                 vuln_id=vuln_id,
                 cve_id=enriched.id,
-                status="pending",
+                status="open",
                 base_priority=base_priority,
                 effective_priority=effective_priority,
                 discovered_at=vuln.discovered_at or "",
@@ -414,19 +418,23 @@ def assign_vulnerabilities(
 
 
 @limiter.limit("30/minute")
-@router.patch("/assets/{asset_id}/vulnerabilities/{cve_id}/status")
+@router.patch(
+    "/assets/{asset_id}/vulnerabilities/{cve_id}/status",
+    response_model=VulnStatusUpdateResponse,
+)
 def update_vuln_status(
     request: Request,
     asset_id: int,
     cve_id: str,
     body: AssetVulnStatusUpdate,
-) -> dict:
+) -> VulnStatusUpdateResponse:
     """Update the remediation status of an asset vulnerability.
 
-    Valid transitions: pending -> in_progress -> verified -> closed | deferred
-    Each status change writes an immutable RemediationRecord audit entry.
+    Valid states: open, in_review, remediated, closed, deferred.
+    Any transition is allowed (soft enforcement), but backwards transitions
+    are flagged as regressions in the audit trail and the response.
 
-    Returns the updated vulnerability record.
+    Returns the updated vulnerability record with full remediation history.
     """
     normalized_cve = cve_id.upper()
     if not re.match(CVE_PATTERN, normalized_cve):
@@ -450,21 +458,45 @@ def update_vuln_status(
             ).model_dump(),
         )
 
-    cmdb.update_vuln_status(
+    updated, is_regression = cmdb.update_vuln_status(
         vuln.id,
         status=body.status.value,
+        from_status=vuln.status,
         owner=body.owner,
         evidence=body.evidence,
     )
 
+    if not updated:
+        raise HTTPException(
+            status_code=404,
+            detail=ErrorDetail(
+                code="vuln_not_found",
+                message=f"Vulnerability record {vuln.id} could not be updated.",
+            ).model_dump(),
+        )
+
     # Re-fetch to return the updated record
-    updated = cmdb.get_vuln_by_asset_and_cve(asset_id, normalized_cve)
-    return {
-        "vuln_id": updated.id,
-        "cve_id": updated.cve_id,
-        "status": updated.status,
-        "effective_priority": updated.effective_priority,
-        "deadline": updated.deadline,
-        "owner": updated.owner,
-        "evidence": updated.evidence,
-    }
+    updated_vuln = cmdb.get_vuln_by_asset_and_cve(asset_id, normalized_cve)
+    history = cmdb.get_remediation_history(vuln.id)
+
+    return VulnStatusUpdateResponse(
+        vuln_id=updated_vuln.id,
+        cve_id=updated_vuln.cve_id,
+        status=updated_vuln.status,
+        effective_priority=updated_vuln.effective_priority,
+        deadline=updated_vuln.deadline,
+        owner=updated_vuln.owner,
+        evidence=updated_vuln.evidence,
+        is_regression=is_regression,
+        remediation_history=[
+            RemediationHistoryRow(
+                id=r.id,
+                status=r.status,
+                owner=r.owner,
+                evidence=r.evidence,
+                updated_at=r.updated_at,
+                is_regression=r.is_regression,
+            )
+            for r in history
+        ],
+    )

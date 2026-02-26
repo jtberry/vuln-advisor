@@ -212,9 +212,9 @@ class EnvironmentEnum(str, Enum):
 
 
 class VulnStatusEnum(str, Enum):
-    pending = "pending"
-    in_progress = "in_progress"
-    verified = "verified"
+    open = "open"
+    in_review = "in_review"
+    remediated = "remediated"
     closed = "closed"
     deferred = "deferred"
 
@@ -332,6 +332,40 @@ class AssetVulnStatusUpdate(BaseModel):
     status: VulnStatusEnum
     owner: Optional[str] = Field(default=None, max_length=255)
     evidence: Optional[str] = Field(default=None, max_length=1000)
+
+
+class RemediationHistoryRow(BaseModel):
+    """Single entry in the remediation audit trail."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    status: str
+    owner: Optional[str]
+    evidence: Optional[str]
+    updated_at: str
+    is_regression: bool = False
+
+
+class VulnStatusUpdateResponse(BaseModel):
+    """Response for PATCH .../vulnerabilities/{cve_id}/status.
+
+    Returns the full updated vulnerability record, complete remediation
+    history, and a top-level is_regression flag so callers can highlight
+    backwards transitions without parsing the history.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    vuln_id: int
+    cve_id: str
+    status: str
+    effective_priority: str
+    deadline: Optional[str]
+    owner: Optional[str]
+    evidence: Optional[str]
+    is_regression: bool
+    remediation_history: list[RemediationHistoryRow]
 
 
 # ---------------------------------------------------------------------------

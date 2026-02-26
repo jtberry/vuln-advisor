@@ -52,7 +52,7 @@ class AssetVulnerability:
 
     asset_id: int
     cve_id: str
-    status: str = "pending"  # "pending" | "in_progress" | "verified" | "closed" | "deferred"
+    status: str = "open"  # "open" | "in_review" | "remediated" | "closed" | "deferred"
     base_priority: str = ""
     effective_priority: str = ""
     discovered_at: str = ""  # ISO 8601
@@ -78,4 +78,5 @@ class RemediationRecord:
     updated_at: str  # ISO 8601
     owner: Optional[str] = None
     evidence: Optional[str] = None
+    is_regression: bool = False
     id: Optional[int] = None
