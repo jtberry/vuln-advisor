@@ -32,6 +32,8 @@ Routes:
   GET  /logout                                         -- clear cookie, redirect /login (GET; see Plan 02 trade-off)
   GET  /setup                                         -- first-run wizard
   POST /setup                                         -- create first admin
+  GET  /register                                      -- registration form
+  POST /register                                      -- create user account (role="user")
 """
 
 import logging
@@ -59,6 +61,35 @@ from core.models import CVE_PATTERN
 from core.pipeline import process_cve, process_cves
 
 logger = logging.getLogger("vulnadvisor.web")
+
+
+# ---------------------------------------------------------------------------
+# Password validation
+# ---------------------------------------------------------------------------
+
+
+def _validate_password(password: str) -> str:
+    """Return an error message if the password fails complexity rules, empty string if valid.
+
+    Rules (all must pass):
+      - At least 12 characters
+      - At least one uppercase letter
+      - At least one number
+      - At least one special character
+
+    Shared by both the setup wizard and the registration flow so the rules
+    stay consistent in one place (single responsibility).
+    """
+    if len(password) < 12:
+        return "Password must be at least 12 characters."
+    if not re.search(r"[A-Z]", password):
+        return "Password must contain at least one uppercase letter."
+    if not re.search(r"[0-9]", password):
+        return "Password must contain at least one number."
+    if not re.search(r'[!@#$%^&*()\-_=+\[\]{};:\'",.<>/?\\|`~]', password):
+        return "Password must contain at least one special character."
+    return ""
+
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # Expose try_get_current_user as a Jinja2 global so layout.html can call it
@@ -1215,6 +1246,7 @@ def setup_form(request: Request, response: Response, csrf_protect: CsrfProtect =
 @router.post("/setup", response_class=HTMLResponse)
 async def setup_post(
     request: Request,
+    response: Response,
     username: str = Form(...),
     password: str = Form(...),
     confirm_password: str = Form(...),
@@ -1226,10 +1258,11 @@ async def setup_post(
     though the middleware already checked setup_required. Two concurrent requests
     could both pass the middleware check before either creates a user. The DB-
     level check and IntegrityError catch ensure only one wins.
+
+    Auto-login: on success, a JWT is issued and the auth cookie is set so the
+    admin arrives at the dashboard without a separate login step.
     """
     await csrf_protect.validate_csrf(request)
-
-    from sqlalchemy.exc import IntegrityError
 
     user_store: UserStore = request.app.state.user_store
 
@@ -1237,21 +1270,28 @@ async def setup_post(
     if user_store.has_users():
         return RedirectResponse("/login?error=setup_complete", status_code=302)
 
-    if password != confirm_password:
-        return templates.TemplateResponse(
+    def _setup_error(msg: str) -> HTMLResponse:
+        """Re-render setup form with error message and a fresh CSRF token.
+
+        Error re-renders must include a new CSRF token so the next submission
+        passes validation. Without this, the form's hidden csrf_token input
+        would be empty and every retry would fail CSRF checks.
+        """
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        err_resp = templates.TemplateResponse(
             "setup.html",
-            {"request": request, "error_msg": "Passwords do not match."},
+            {"request": request, "error_msg": msg, "csrf_token": csrf_token},
         )
-    if len(password) < 8:
-        return templates.TemplateResponse(
-            "setup.html",
-            {"request": request, "error_msg": "Password must be at least 8 characters."},
-        )
+        csrf_protect.set_csrf_cookie(signed_token, err_resp)
+        return err_resp
+
     if not username.strip():
-        return templates.TemplateResponse(
-            "setup.html",
-            {"request": request, "error_msg": "Username is required."},
-        )
+        return _setup_error("Username is required.")
+    if password != confirm_password:
+        return _setup_error("Passwords do not match.")
+    pw_error = _validate_password(password)
+    if pw_error:
+        return _setup_error(pw_error)
 
     from auth.models import User as AuthUser
 
@@ -1261,10 +1301,17 @@ async def setup_post(
         hashed_password=hash_password(password),
     )
     try:
-        user_store.create_user(new_admin)
+        new_user_id: int = user_store.create_user(new_admin)
         request.app.state.setup_required = False
     except IntegrityError:
         # Race condition: another request created an admin first [M1]
         return RedirectResponse("/login?error=setup_complete", status_code=302)
 
-    return RedirectResponse("/login", status_code=302)
+    # Auto-login: issue JWT and set auth cookie so admin lands on the dashboard
+    # without needing to re-enter credentials. Pattern: create token -> set cookie
+    # -> return redirect (cookie attaches to RedirectResponse, not the final page).
+    token = create_access_token(new_user_id, new_admin.username, new_admin.role)
+    resp = RedirectResponse("/dashboard", status_code=302)
+    set_auth_cookie(resp, token)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

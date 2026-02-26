@@ -48,7 +48,7 @@
           </div>
           <div class="mb-3">
             <label for="password" class="form-label text-secondary" style="font-size: 0.85rem">
-              Password <span class="text-muted">(min 8 characters)</span>
+              Password
             </label>
             <input
               type="password"
@@ -56,9 +56,12 @@
               id="password"
               name="password"
               autocomplete="new-password"
-              minlength="8"
+              minlength="12"
               required
             >
+            <small class="form-text text-muted" style="font-size: 0.8rem">
+              At least 12 characters, one uppercase letter, one number, and one special character.
+            </small>
           </div>
           <div class="mb-4">
             <label for="confirm_password" class="form-label text-secondary" style="font-size: 0.85rem">
@@ -70,7 +73,7 @@
               id="confirm_password"
               name="confirm_password"
               autocomplete="new-password"
-              minlength="8"
+              minlength="12"
               required
             >
           </div>
