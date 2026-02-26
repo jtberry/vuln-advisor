@@ -117,9 +117,11 @@ def list_assets(request: Request) -> list[AssetSummaryRow]:
     """Return all registered assets with open vulnerability counts per priority."""
     cmdb: CMDBStore = request.app.state.cmdb
     assets = cmdb.list_assets()
+    all_counts = cmdb.get_all_asset_priority_counts()
+    zero = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
     rows = []
     for asset in assets:
-        counts = cmdb.get_priority_counts(asset.id)
+        counts = all_counts.get(asset.id, zero)
         rows.append(
             AssetSummaryRow(
                 id=asset.id,

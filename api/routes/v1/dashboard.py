@@ -39,10 +39,13 @@ def get_dashboard(request: Request) -> DashboardResponse:
     priority_counts = cmdb.get_all_priority_counts()
     total_open_vulns = sum(priority_counts.values())
 
-    # Build per-asset P1 counts for the top-10 ranking
+    # Single aggregate query replaces per-asset loop (N+1 -> 2 queries total)
+    all_counts = cmdb.get_all_asset_priority_counts()
+    zero = {"P1": 0, "P2": 0, "P3": 0, "P4": 0}
+
     asset_p1: list[dict] = []
     for asset in assets:
-        counts = cmdb.get_priority_counts(asset.id)
+        counts = all_counts.get(asset.id, zero)
         asset_p1.append(
             {
                 "asset_id": asset.id,

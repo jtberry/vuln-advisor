@@ -27,7 +27,21 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, event, text
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+    case,
+    create_engine,
+    event,
+    func,
+    select,
+    text,
+)
 from sqlalchemy.engine import Engine
 
 from cmdb.models import Asset, AssetVulnerability, RemediationRecord
@@ -382,6 +396,45 @@ class CMDBStore:
             if p in counts:
                 counts[p] += 1
         return counts
+
+    def get_all_asset_priority_counts(self) -> dict[int, dict[str, int]]:
+        """Return open vuln counts per priority per asset in a single query.
+
+        Uses conditional aggregation: COUNT(CASE WHEN condition THEN 1 END)
+        groups by asset_id in one SELECT, eliminating the N+1 pattern.
+
+        Terminal statuses (closed, deferred) are excluded from counts.
+        Assets with zero open vulns are not returned -- callers should use
+        .get(asset_id, {"P1": 0, "P2": 0, "P3": 0, "P4": 0}) for a safe default.
+        """
+        terminal = ["closed", "deferred"]
+        non_terminal = _asset_vulns.c.status.not_in(terminal)
+        stmt = select(
+            _asset_vulns.c.asset_id,
+            func.count(
+                case(
+                    ((_asset_vulns.c.effective_priority == "P1") & non_terminal, 1),
+                )
+            ).label("p1"),
+            func.count(
+                case(
+                    ((_asset_vulns.c.effective_priority == "P2") & non_terminal, 1),
+                )
+            ).label("p2"),
+            func.count(
+                case(
+                    ((_asset_vulns.c.effective_priority == "P3") & non_terminal, 1),
+                )
+            ).label("p3"),
+            func.count(
+                case(
+                    ((_asset_vulns.c.effective_priority == "P4") & non_terminal, 1),
+                )
+            ).label("p4"),
+        ).group_by(_asset_vulns.c.asset_id)
+        with self.engine.connect() as conn:
+            rows = conn.execute(stmt).fetchall()
+        return {row.asset_id: {"P1": row.p1, "P2": row.p2, "P3": row.p3, "P4": row.p4} for row in rows}
 
     def get_remediation_history(self, vuln_id: int) -> list[RemediationRecord]:
         """Return all audit records for an AssetVulnerability, oldest first."""
