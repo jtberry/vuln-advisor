@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Auth & Foundation | 8/8 | Complete   | 2026-02-26 |
 | 2. Data Layer | 2/2 | Complete   | 2026-02-26 |
-| 3. Dashboard & Charts | 2/4 | In Progress|  |
+| 3. Dashboard & Charts | 3/4 | In Progress|  |
 | 4. UI Polish | 0/TBD | Not started | - |
 | 5. Test Coverage | 0/TBD | Not started | - |
 | 6. Containerization | 0/TBD | Not started | - |

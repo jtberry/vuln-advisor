@@ -14,8 +14,6 @@ assembly, get_overdue_vulns() integration) are implemented in 03-02.
 from typing import Optional
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from core.models import CVSSDetails, EnrichedCVE, PoCInfo
 
 # ---------------------------------------------------------------------------
@@ -69,13 +67,24 @@ def _make_mock_cmdb(
 
 
 def _make_mock_request(cmdb: Optional[MagicMock] = None) -> MagicMock:
-    """Build a mock Starlette Request with app.state pre-configured."""
+    """Build a mock Starlette Request with app.state pre-configured.
+
+    cookies and headers are configured as real dicts so that .get() calls
+    with defaults behave correctly (returning None / "" rather than MagicMock
+    objects that would cause downstream code -- e.g. HMAC hashing -- to fail).
+    """
     request = MagicMock()
     request.app.state.cmdb = cmdb or _make_mock_cmdb()
     request.app.state.kev_set = set()
     request.app.state.cache = None
-    request.app.state.user_store = MagicMock()
+    user_store = MagicMock()
+    user_store.get_sla_config.return_value = {"P1": 7, "P2": 30, "P3": 90, "P4": 180}
+    request.app.state.user_store = user_store
     request.session = {}
+    # Use real dicts so .get(key, default) returns the default for missing keys
+    request.cookies = {}
+    request.headers = {}
+    request.url.path = "/"
     return request
 
 
@@ -85,7 +94,6 @@ def _make_mock_request(cmdb: Optional[MagicMock] = None) -> MagicMock:
 
 
 class TestDashboardThreatIntel:
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard threat intel assembly")
     def test_kev_highlights(self) -> None:
         """Dashboard must surface CVEs where enriched.is_kev is True in threat_intel_items.
 
@@ -110,6 +118,7 @@ class TestDashboardThreatIntel:
             return MagicMock()
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", return_value=kev_enriched),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):
@@ -122,7 +131,6 @@ class TestDashboardThreatIntel:
         kev_items = [item for item in threat_items if item.get("is_kev") is True]
         assert len(kev_items) > 0, "Expected at least one KEV-flagged item in threat_intel_items"
 
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard EPSS filtering")
     def test_epss_highlights(self) -> None:
         """Dashboard must surface CVEs where enriched.epss_score > 0.5 in threat_intel_items."""
         open_vuln = {
@@ -143,6 +151,7 @@ class TestDashboardThreatIntel:
             return MagicMock()
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", return_value=high_epss),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):
@@ -154,7 +163,6 @@ class TestDashboardThreatIntel:
         high_epss_items = [item for item in threat_items if item.get("epss_score", 0) > 0.5]
         assert len(high_epss_items) > 0, "Expected high-EPSS CVE in threat_intel_items"
 
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard EPSS filtering")
     def test_low_epss_excluded(self) -> None:
         """CVEs with epss_score <= 0.5 and is_kev=False must NOT appear in threat_intel_items."""
         open_vuln = {
@@ -175,6 +183,7 @@ class TestDashboardThreatIntel:
             return MagicMock()
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", return_value=low_epss),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):
@@ -186,7 +195,6 @@ class TestDashboardThreatIntel:
         matching = [item for item in threat_items if item.get("cve_id") == "CVE-2022-99999"]
         assert len(matching) == 0, "Low-EPSS non-KEV CVE should not appear in threat_intel_items"
 
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard enrichment error handling")
     def test_enrichment_failure_skipped(self) -> None:
         """When process_cve raises an Exception, the dashboard must still render.
 
@@ -210,6 +218,7 @@ class TestDashboardThreatIntel:
             return MagicMock()
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", side_effect=Exception("NVD timeout")),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):
@@ -230,7 +239,6 @@ class TestDashboardThreatIntel:
 
 
 class TestDashboardOverdue:
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard overdue data integration")
     def test_overdue_data_passed_to_template(self) -> None:
         """Dashboard must pass overdue_data from get_overdue_vulns() to the template context."""
         overdue_item = {
@@ -249,7 +257,10 @@ class TestDashboardOverdue:
             captured_context.update(context)
             return MagicMock()
 
-        with patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response):
+        with (
+            patch("web.routes._require_auth", return_value=None),
+            patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
+        ):
             from web.routes import dashboard
 
             dashboard(request)
@@ -260,7 +271,6 @@ class TestDashboardOverdue:
         assert len(overdue_data["overdue"]) == 1
         assert overdue_data["overdue"][0]["cve_id"] == "CVE-2021-00001"
 
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard KEV count stat card")
     def test_kev_count_matches_kev_items(self) -> None:
         """Template context kev_count must equal the number of KEV-flagged threat intel items."""
         open_vulns = [
@@ -286,12 +296,13 @@ class TestDashboardOverdue:
 
         call_count = [0]
 
-        def fake_process_cve(cve_id, **kwargs):
+        def fake_process_cve(cve_id, *args, **kwargs):
             idx = call_count[0]
             call_count[0] += 1
             return kev_enriched[idx] if idx < len(kev_enriched) else None
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", side_effect=fake_process_cve),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):
@@ -309,7 +320,6 @@ class TestDashboardOverdue:
 
 
 class TestDashboardEmptyState:
-    @pytest.mark.xfail(reason="Awaiting 03-02 implementation: dashboard empty state with new fields")
     def test_no_assets_returns_empty_dashboard(self) -> None:
         """Dashboard with no assets must render without error.
 
@@ -327,6 +337,7 @@ class TestDashboardEmptyState:
             return MagicMock()
 
         with (
+            patch("web.routes._require_auth", return_value=None),
             patch("web.routes.process_cve", return_value=None),
             patch("web.routes.templates.TemplateResponse", side_effect=fake_template_response),
         ):

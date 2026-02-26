@@ -297,6 +297,62 @@ def _cvss_row_css(metric: str, value: str) -> str:
 _PAGE_SIZE = 25
 
 
+def _build_threat_intel(request: Request) -> list[dict]:
+    """Build the threat intelligence item list for the dashboard.
+
+    Fetches open vulnerability CVE IDs from the CMDB, enriches each through
+    the pipeline (wrapping failures so a single bad CVE cannot break the page),
+    and returns only items that are KEV-listed or have an EPSS score > 0.5.
+
+    KEV items are sorted first; within each group items are sorted by EPSS
+    score descending so the highest-risk items surface at the top of the table.
+
+    Pattern: "fail-safe enrichment" -- external data failures are absorbed per
+    CLAUDE.md safety rules (external calls return None or empty, never raise).
+    """
+    cmdb: CMDBStore = request.app.state.cmdb
+    kev_set: set = request.app.state.kev_set
+    cache = request.app.state.cache
+
+    open_vulns = cmdb.get_open_vuln_cve_ids()
+    if len(open_vulns) > 50:
+        logger.info("Dashboard threat intel: enriching %d CVEs", len(open_vulns))
+
+    items: list[dict] = []
+    for vuln in open_vulns:
+        cve_id = vuln["cve_id"]
+        try:
+            enriched = process_cve(cve_id, kev_set, cache, exposure=vuln.get("exposure", "internal"))
+        except Exception:
+            logger.warning("Dashboard threat intel: failed to enrich %s, skipping", cve_id)
+            continue
+
+        if enriched is None:
+            continue
+
+        epss_score: Optional[float] = enriched.epss_score
+        is_kev: bool = bool(enriched.is_kev)
+
+        # Filter: only KEV entries or high-EPSS (> 0.5) items surface here
+        if not is_kev and (epss_score is None or epss_score <= 0.5):
+            continue
+
+        items.append(
+            {
+                "cve_id": cve_id,
+                "asset_id": vuln["asset_id"],
+                "hostname": vuln["hostname"],
+                "is_kev": is_kev,
+                "epss_score": epss_score,
+                "effective_priority": vuln["effective_priority"],
+            }
+        )
+
+    # KEV items first, then descending EPSS score
+    items.sort(key=lambda x: (0 if x["is_kev"] else 1, -(x["epss_score"] or 0.0)))
+    return items
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, page: int = 1) -> HTMLResponse:
     if redirect := _require_auth(request):
@@ -305,20 +361,21 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
     assets = cmdb.list_assets()
     priority_counts = cmdb.get_all_priority_counts()
 
+    # Resolve per-asset vuln counts in a single query (eliminates N+1 from the old loop)
+    all_asset_counts = cmdb.get_all_asset_priority_counts()
+
     asset_rows = []
-    overdue_count = 0
-
     for asset in assets:
-        counts = cmdb.get_priority_counts(asset.id)
-        vulns = cmdb.get_asset_vulns(asset.id)
+        # .get() safe default: assets with zero open vulns are omitted from the bulk count map
+        counts = all_asset_counts.get(asset.id, {"P1": 0, "P2": 0, "P3": 0, "P4": 0})
 
+        # Nearest open deadline per asset (still a per-asset query, but this is a display-only
+        # detail not covered by the bulk count query and only used for the risk table column)
+        vulns = cmdb.get_asset_vulns(asset.id)
         nearest_deadline: Optional[str] = None
         for v in vulns:
             if v.status in ("closed", "deferred") or not v.deadline:
                 continue
-            info = _deadline_info(v.deadline)
-            if info["text"] == "OVERDUE":
-                overdue_count += 1
             if nearest_deadline is None or v.deadline < nearest_deadline:
                 nearest_deadline = v.deadline
 
@@ -338,6 +395,15 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
     start = (page - 1) * _PAGE_SIZE
     page_rows = asset_rows[start : start + _PAGE_SIZE]
 
+    # --- New dashboard datasets ---
+    threat_intel_items = _build_threat_intel(request)
+    kev_count = sum(1 for item in threat_intel_items if item["is_kev"])
+
+    user_store = request.app.state.user_store
+    sla_config = user_store.get_sla_config()
+    overdue_data = cmdb.get_overdue_vulns(sla_days=sla_config)
+    overdue_count = len(overdue_data["overdue"])
+
     return templates.TemplateResponse(
         "dashboard.html",
         {
@@ -351,6 +417,9 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
             "total_pages": total_pages,
             "page_size": _PAGE_SIZE,
             "flash_message": _get_flash(request),
+            "threat_intel_items": threat_intel_items,
+            "overdue_data": overdue_data,
+            "kev_count": kev_count,
         },
     )
 

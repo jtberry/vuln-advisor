@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T21:50:29.144Z"
+last_updated: "2026-02-26T22:02:00.901Z"
 progress:
   total_phases: 3
   completed_phases: 2
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Phase: 3 of 6 (Dashboard & Charts) -- IN PROGRESS
-Plan: 3 of 3 in current phase -- COMPLETE
-Status: Phase 3 Plan 03 complete
-Last activity: 2026-02-26 - Plan 03-03 complete (status modal, optimistic UI, bulk status change)
+Plan: 1 of 3 in current phase -- COMPLETE
+Status: Phase 3 Plan 01 complete
+Last activity: 2026-02-26 - Plan 03-01 complete (SLA query backend, configurable SLA targets, overdue/approaching vulns)
 
 Progress: [██████░░░░] 60%
 
@@ -50,6 +50,7 @@ Progress: [██████░░░░] 60%
 
 *Updated after each plan completion*
 | Phase 03-dashboard-charts P00 | 7 | 3 tasks | 3 files |
+| Phase 03-dashboard-charts P01 | 12 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -95,6 +96,10 @@ Recent decisions affecting current work:
 - [Phase 03-dashboard-charts]: Bulk status change uses page reload (not optimistic DOM): N concurrent optimistic updates with revert logic is too complex; reload is simpler and correct
 - [Phase 03-dashboard-charts]: No CSRF token in JSON fetch PATCH: CSRF protection is form-POST specific in this app; JSON API routes use session cookie auth
 - [Phase 03-dashboard-charts]: xfail over skip for wave-0 test stubs: xfail executes test body so AttributeError on missing methods surfaces; tests flip to XPASS when production code lands in 03-01/03-02
+- [Phase 03-dashboard-charts]: Python date arithmetic over SQLite date functions for deadline classification: portability and testability
+- [Phase 03-dashboard-charts]: Caller-provided deadline wins over auto-computed in create_asset_vuln: allows importing vulns with existing deadlines from scanners
+- [Phase 03-dashboard-charts]: 200-item cap with P1/P2 filter in get_open_vuln_cve_ids: dashboard threat intel calls process_cve() per CVE; cap limits latency
+- [Phase 03-dashboard-charts]: SLA config in app_settings not a new table: follows existing single-row settings pattern; four columns added via _ensure_sla_columns()
 
 ### Pending Todos
 
@@ -108,5 +113,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-26
-Stopped at: Completed 03-dashboard-charts/03-00-PLAN.md (test stubs for CMDB queries, SLA logic, dashboard threat intel)
+Stopped at: Completed 03-dashboard-charts/03-01-PLAN.md (SLA query backend, configurable SLA targets, overdue/approaching vulns)
 Resume file: None
