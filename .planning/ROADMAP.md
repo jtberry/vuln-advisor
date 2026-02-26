@@ -98,7 +98,11 @@ Plans:
   2. Auth redirect chain (login -> session -> expiry -> redirect -> return) is tested with an automated test that fails if the redirect loop regresses
   3. CSV formula injection is covered by a regression test that asserts sanitized output for cells starting with `=`, `+`, `-`, `@`
   4. All new API routes added this milestone have at least one happy-path and one auth-failure test
-**Plans**: TBD
+**Plans**: 2 total (05-01 through 05-02)
+
+Plans:
+- [ ] 05-01-PLAN.md -- Shared conftest fixtures, ingest parser tests, CSV formula injection test + sanitizer
+- [ ] 05-02-PLAN.md -- Auth redirect chain tests, API route integration tests, pyproject.toml coverage update
 
 ### Phase 6: Containerization
 **Goal**: VulnAdvisor can be deployed as a containerized application with TLS and production-ready configuration
@@ -122,5 +126,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Data Layer | 2/2 | Complete   | 2026-02-26 |
 | 3. Dashboard & Charts | 4/4 | Complete   | 2026-02-26 |
 | 4. UI Polish | 2/2 | Complete   | 2026-02-26 |
-| 5. Test Coverage | 0/TBD | Not started | - |
+| 5. Test Coverage | 1/2 | In Progress|  |
 | 6. Containerization | 0/TBD | Not started | - |

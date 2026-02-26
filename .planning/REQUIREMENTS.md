@@ -22,7 +22,7 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 - [x] **DEBT-01**: Centralized pydantic-settings config replaces scattered os.getenv() calls
 - [x] **DEBT-02**: N+1 query in dashboard API is replaced with single aggregate query
 - [x] **DEBT-03**: SQLite WAL mode enabled for concurrent read safety
-- [ ] **DEBT-04**: Test suite expanded to cover stores, routes, auth, and ingest
+- [x] **DEBT-04**: Test suite expanded to cover stores, routes, auth, and ingest
 
 ### Status Workflow
 
@@ -115,7 +115,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UIPL-01 | Phase 4 | Complete |
 | UIPL-02 | Phase 4 | Complete |
 | UIPL-03 | Phase 4 | Complete |
-| DEBT-04 | Phase 5 | Pending |
+| DEBT-04 | Phase 5 | Complete |
 | DEPL-01 | Phase 6 | Pending |
 
 **Coverage:**

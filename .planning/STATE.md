@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T22:20:15.321Z"
+last_updated: "2026-02-26T23:54:26.189Z"
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 14
-  completed_plans: 14
+  total_phases: 6
+  completed_phases: 4
+  total_plans: 18
+  completed_plans: 17
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-26)
 
 **Core value:** A solo security analyst can open VulnAdvisor daily, see what needs attention, triage CVEs, track asset risk, and update status - all in one tool with no paid subscriptions.
-**Current focus:** Phase 4 - UI Polish
+**Current focus:** Phase 5 - Test Coverage
 
 ## Current Position
 
-Phase: 4 of 6 (UI Polish) -- IN PROGRESS
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: Phase 4 Plan 02 complete
-Last activity: 2026-02-26 - Plan 04-02 complete (getting-started view, section reorder, all-clear widgets, clickable rows, empty state upgrades)
+Phase: 5 of 6 (Test Coverage) -- IN PROGRESS
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: Phase 5 Plan 01 complete
+Last activity: 2026-02-26 - Plan 05-01 complete (conftest.py fixtures, 24 ingest parser tests, CSV injection fix _sanitize_csv_cell() CWE-1236)
 
-Progress: [█████████░] 90%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [█████████░] 90%
 | Phase 03-dashboard-charts P01 | 12 | 2 tasks | 4 files |
 | Phase 03-dashboard-charts P02 | 22 | 2 tasks | 4 files |
 | Phase 04-ui-polish P01 | 2 | 2 tasks | 8 files |
+| Phase 05-test-coverage P01 | 6 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ Recent decisions affecting current work:
 - [04-02]: getting_started branch wraps entire dashboard body below page header -- KPI zeros never appear on fresh install; single flag, not per-widget conditionals
 - [04-02]: CVE ID links in Threat Intel go to /cve/CVE-ID; row click goes to /assets/ID -- two distinct navigation intents served by two click targets
 - [04-02]: event.stopPropagation() on inline <a> tags inside clickable <tr> prevents row handler from firing when link is clicked directly
+- [Phase 05-01]: Named SQLite URIs (file:name?mode=memory&cache=shared&uri=true) over plain :memory: for thread-safe in-memory test isolation in TestClient
+- [Phase 05-01]: Tab-prefix sanitization (OWASP CWE-1236) in _sanitize_csv_cell() -- universal across Excel, LibreOffice, Google Sheets
 
 ### Pending Todos
 
