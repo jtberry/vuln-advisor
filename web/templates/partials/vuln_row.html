@@ -3,7 +3,7 @@
 
   Used in two contexts:
     1. Included by asset_detail.html (initial page render)
-    2. Returned by the HTMX status update route (fragment swap)
+    2. Returned by the HTMX fragment route (add-CVEs tbody swap) -- vuln_table_body.html
 
   Required context variables:
     vuln          -- AssetVulnerability dataclass
@@ -11,12 +11,30 @@
     deadline_info -- dict with {text, css} from _deadline_info()
     nvd_url       -- NVD detail URL string
     asset_id      -- int
-    statuses      -- list of valid status strings
+    statuses      -- list of valid status strings (kept for HTMX route compatibility)
 #}
-<tr id="row-{{ vuln.cve_id }}">
+
+{# Badge CSS class map for server-side rendering.
+   The closed style is applied via inline style; for other statuses we use Bootstrap classes. #}
+{% set _badge_cls = {
+  'open':        'bg-secondary',
+  'in_review':   'bg-info text-dark',
+  'remediated':  'bg-success',
+  'deferred':    'bg-warning text-dark',
+} %}
+
+<tr id="row-{{ vuln.cve_id }}" data-cve="{{ vuln.cve_id }}">
+
+  {# Checkbox -- first column for bulk selection #}
+  <td class="text-center" style="width: 32px; padding-left: 0.75rem">
+    <input type="checkbox"
+           class="form-check-input vuln-checkbox"
+           data-cve-id="{{ vuln.cve_id }}"
+           style="cursor: pointer">
+  </td>
 
   {# CVE ID #}
-  <td style="padding-left: 1rem">
+  <td style="padding-left: 0.5rem">
     <a href="/cve/{{ vuln.cve_id }}"
        class="text-decoration-none font-mono fw-semibold"
        style="font-size: 0.85rem; color: #58a6ff">
@@ -86,31 +104,29 @@
     {% endif %}
   </td>
 
-  {# Status dropdown with HTMX inline update #}
+  {# Status badge -- clickable, opens #statusModal #}
   <td>
-    <form hx-post="/assets/{{ asset_id }}/vulnerabilities/{{ vuln.cve_id }}/status"
-          hx-target="closest tr"
-          hx-swap="outerHTML"
-          class="d-flex align-items-center gap-2">
-      <select name="status"
-              class="form-select form-select-sm"
-              style="width: auto; min-width: 130px; font-size: 0.78rem;
-                     background-color: #21262d; border-color: #30363d; color: #c9d1d9">
-        {% for s in statuses %}
-        <option value="{{ s }}" {% if vuln.status == s %}selected{% endif %}>
-          {{ s | replace('_', ' ') | title }}
-        </option>
-        {% endfor %}
-      </select>
-      <button type="submit"
-              class="btn btn-sm"
-              style="font-size: 0.72rem; padding: 3px 10px;
-                     background-color: #21262d; border-color: #30363d; color: #8b949e">
-        <span>Save</span>
-        <span class="htmx-indicator spinner-border spinner-border-sm ms-1"
-              style="width: 0.7rem; height: 0.7rem" role="status"></span>
-      </button>
-    </form>
+    {% if vuln.status == 'closed' %}
+    <span class="status-badge badge"
+          data-cve="{{ vuln.cve_id }}"
+          data-current-status="{{ vuln.status }}"
+          data-bs-toggle="modal"
+          data-bs-target="#statusModal"
+          style="cursor: pointer; background-color: #21262d; color: #8b949e"
+          title="Click to change status">
+      Closed
+    </span>
+    {% else %}
+    <span class="status-badge badge {{ _badge_cls.get(vuln.status, 'bg-secondary') }}"
+          data-cve="{{ vuln.cve_id }}"
+          data-current-status="{{ vuln.status }}"
+          data-bs-toggle="modal"
+          data-bs-target="#statusModal"
+          style="cursor: pointer"
+          title="Click to change status">
+      {{ vuln.status | replace('_', ' ') | title }}
+    </span>
+    {% endif %}
   </td>
 
   {# Owner #}

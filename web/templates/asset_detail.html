@@ -156,15 +156,32 @@
 
   <div class="card-body p-0">
     {% if vuln_rows %}
+
+    {# ── Bulk action toolbar (hidden until checkboxes selected) ── #}
+    <div id="bulkToolbar" class="d-none px-3 py-2 d-flex align-items-center gap-2"
+         style="border-bottom: 1px solid #21262d">
+      <span class="text-muted" style="font-size: 0.82rem">
+        <span id="selectedCount">0</span> selected
+      </span>
+      <button id="bulkChangeBtn"
+              class="btn btn-sm btn-outline-primary"
+              style="font-size: 0.78rem">
+        Change Status
+      </button>
+    </div>
+
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th style="padding-left: 1rem; min-width: 160px">CVE</th>
+          <th style="width: 32px; padding-left: 0.75rem" class="text-center">
+            <input type="checkbox" class="form-check-input" id="selectAllVulns" title="Select all">
+          </th>
+          <th style="padding-left: 0.5rem; min-width: 160px">CVE</th>
           <th>Priority</th>
           <th>CVSS</th>
           <th style="min-width: 220px">Description</th>
           <th>KEV</th>
-          <th style="min-width: 240px">Status</th>
+          <th>Status</th>
           <th>Owner</th>
           <th>SLA Deadline</th>
         </tr>
@@ -192,4 +209,93 @@
   </div>
 </div>
 
+{# ── Status modal (single + bulk) ────────────────────────────────── #}
+{% include "partials/status_modal.html" %}
+
+{# ── Toast container ─────────────────────────────────────────────── #}
+<div id="toastContainer"
+     class="toast-container position-fixed bottom-0 end-0 p-3"
+     style="z-index: 9999">
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+
+  var selectAll    = document.getElementById("selectAllVulns");
+  var bulkToolbar  = document.getElementById("bulkToolbar");
+  var selectedCount = document.getElementById("selectedCount");
+  var bulkChangeBtn = document.getElementById("bulkChangeBtn");
+  var statusModal  = document.getElementById("statusModal");
+
+  if (!selectAll) return; // No vulns on page -- nothing to do
+
+  // ── Collect all .vuln-checkbox elements ──────────────────────────
+  function getCheckboxes() {
+    return Array.prototype.slice.call(document.querySelectorAll(".vuln-checkbox"));
+  }
+
+  // ── Update bulk toolbar visibility and count ──────────────────────
+  function updateBulkToolbar() {
+    var checked = getCheckboxes().filter(function (cb) { return cb.checked; });
+    var count   = checked.length;
+
+    selectedCount.textContent = count;
+
+    if (count > 0) {
+      bulkToolbar.classList.remove("d-none");
+    } else {
+      bulkToolbar.classList.add("d-none");
+    }
+
+    // Keep select-all checkbox in sync
+    var all = getCheckboxes();
+    selectAll.checked       = all.length > 0 && count === all.length;
+    selectAll.indeterminate = count > 0 && count < all.length;
+  }
+
+  // ── Select-all toggle ────────────────────────────────────────────
+  selectAll.addEventListener("change", function () {
+    getCheckboxes().forEach(function (cb) {
+      cb.checked = selectAll.checked;
+    });
+    updateBulkToolbar();
+  });
+
+  // ── Individual checkbox changes ──────────────────────────────────
+  document.getElementById("vuln-table-body").addEventListener("change", function (e) {
+    if (e.target.classList.contains("vuln-checkbox")) {
+      updateBulkToolbar();
+    }
+  });
+
+  // ── Bulk Change Status button ────────────────────────────────────
+  if (bulkChangeBtn && statusModal) {
+    bulkChangeBtn.addEventListener("click", function () {
+      var checked = getCheckboxes().filter(function (cb) { return cb.checked; });
+      var cveIds  = checked.map(function (cb) { return cb.dataset.cveId; });
+
+      // Set modal to bulk mode before Bootstrap opens it
+      statusModal.dataset.mode     = "bulk";
+      statusModal.dataset.bulkCves = JSON.stringify(cveIds);
+
+      bootstrap.Modal.getOrCreateInstance(statusModal).show();
+    });
+  }
+
+  // ── Single-badge click: ensure mode is single ────────────────────
+  // Bootstrap uses relatedTarget on the show.bs.modal event; the modal
+  // partial handles the rest. We just need to clear bulk mode here in
+  // case the user previously opened in bulk mode then clicked a badge.
+  document.querySelectorAll(".status-badge").forEach(function (badge) {
+    badge.addEventListener("click", function () {
+      statusModal.dataset.mode = "single";
+    });
+  });
+
+}());
+</script>
 {% endblock %}
