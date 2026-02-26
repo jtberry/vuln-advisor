@@ -1,0 +1,204 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin Settings — VulnAdvisor{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+  <div class="col-12">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2 class="h5 fw-semibold mb-0">Admin Settings</h2>
+      <a href="/settings" class="btn btn-outline-secondary btn-sm">My Settings</a>
+    </div>
+
+    {% if flash_message %}
+    <div class="alert alert-success py-2 px-3 mb-4" style="font-size: 0.875rem">
+      {{ flash_message }}
+    </div>
+    {% endif %}
+
+    <!-- Application Toggles -->
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="font-size: 0.9rem">Application Settings</span>
+      </div>
+      <div class="card-body p-4">
+        <form method="post" action="/admin/settings">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="toggle_settings">
+
+          <!-- Self-registration toggle -->
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="self_registration"
+                name="self_registration_enabled"
+                value="1"
+                {% if app_settings.self_registration_enabled %}checked{% endif %}
+              >
+              <label class="form-check-label" for="self_registration" style="font-size: 0.9rem">
+                Allow self-registration
+              </label>
+            </div>
+            <small class="text-muted" style="font-size: 0.8rem">
+              When enabled, anyone with access to this instance can create an account at /register.
+            </small>
+          </div>
+
+          <!-- OAuth toggles (only shown for providers that have env vars configured) -->
+          {% set has_github = false %}
+          {% set has_google = false %}
+          {% for p in enabled_providers %}
+            {% if p.name == "github" %}{% set has_github = true %}{% endif %}
+            {% if p.name == "google" %}{% set has_google = true %}{% endif %}
+          {% endfor %}
+
+          {% if has_github %}
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="github_oauth"
+                name="github_oauth_enabled"
+                value="1"
+                {% if app_settings.github_oauth_enabled %}checked{% endif %}
+              >
+              <label class="form-check-label" for="github_oauth" style="font-size: 0.9rem">
+                Enable GitHub OAuth login
+              </label>
+            </div>
+            <small class="text-muted" style="font-size: 0.8rem">
+              Requires GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET to be set.
+            </small>
+          </div>
+          {% endif %}
+
+          {% if has_google %}
+          <div class="mb-3">
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="google_oauth"
+                name="google_oauth_enabled"
+                value="1"
+                {% if app_settings.google_oauth_enabled %}checked{% endif %}
+              >
+              <label class="form-check-label" for="google_oauth" style="font-size: 0.9rem">
+                Enable Google OAuth login
+              </label>
+            </div>
+            <small class="text-muted" style="font-size: 0.8rem">
+              Requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to be set.
+            </small>
+          </div>
+          {% endif %}
+
+          {% if not has_github and not has_google %}
+          <p class="text-muted mb-3" style="font-size: 0.85rem">
+            No OAuth providers are configured. Set GITHUB_CLIENT_ID/SECRET or
+            GOOGLE_CLIENT_ID/SECRET environment variables to enable OAuth login.
+          </p>
+          {% endif %}
+
+          <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="card mb-4">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="font-size: 0.9rem">User Management</span>
+        <span class="ms-2 badge bg-secondary">{{ users | length }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-sm table-dark table-hover mb-0" style="font-size: 0.875rem">
+            <thead class="border-secondary">
+              <tr>
+                <th class="px-3 py-2 text-secondary fw-normal">Username</th>
+                <th class="px-3 py-2 text-secondary fw-normal">Role</th>
+                <th class="px-3 py-2 text-secondary fw-normal">Created</th>
+                <th class="px-3 py-2 text-secondary fw-normal">Last Login</th>
+                <th class="px-3 py-2 text-secondary fw-normal">Status</th>
+                <th class="px-3 py-2 text-secondary fw-normal">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in users %}
+              <tr class="{% if not u.is_active %}opacity-50{% endif %}">
+                <td class="px-3 py-2">
+                  {{ u.username }}
+                  {% if u.id == current_user.id %}
+                  <span class="ms-1 badge bg-primary" style="font-size: 0.7rem">you</span>
+                  {% endif %}
+                </td>
+                <td class="px-3 py-2">
+                  {% if u.role == "admin" %}
+                  <span class="badge bg-danger" style="font-size: 0.75rem">admin</span>
+                  {% else %}
+                  <span class="badge bg-secondary" style="font-size: 0.75rem">{{ u.role }}</span>
+                  {% endif %}
+                </td>
+                <td class="px-3 py-2 text-muted">
+                  {% if u.created_at %}{{ u.created_at[:10] }}{% else %}—{% endif %}
+                </td>
+                <td class="px-3 py-2 text-muted">
+                  {% if u.last_login %}{{ u.last_login[:10] }}{% else %}Never{% endif %}
+                </td>
+                <td class="px-3 py-2">
+                  {% if u.is_active %}
+                  <span class="text-success" style="font-size: 0.8rem">Active</span>
+                  {% else %}
+                  <span class="text-danger" style="font-size: 0.8rem">Inactive</span>
+                  {% endif %}
+                </td>
+                <td class="px-3 py-2">
+                  <div class="d-flex gap-2">
+                    {% if u.id != current_user.id %}
+                    <!-- Toggle Admin -->
+                    <form method="post" action="/admin/settings"
+                          onsubmit="return confirm('Change role for {{ u.username }}?')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="action" value="toggle_admin">
+                      <input type="hidden" name="user_id" value="{{ u.id }}">
+                      <button type="submit" class="btn btn-outline-secondary btn-sm py-0 px-2"
+                              style="font-size: 0.75rem">
+                        {% if u.role == "admin" %}Remove Admin{% else %}Make Admin{% endif %}
+                      </button>
+                    </form>
+                    <!-- Delete User -->
+                    <form method="post" action="/admin/settings"
+                          onsubmit="return confirm('Permanently delete {{ u.username }}? This cannot be undone.')">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                      <input type="hidden" name="action" value="delete_user">
+                      <input type="hidden" name="user_id" value="{{ u.id }}">
+                      <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-2"
+                              style="font-size: 0.75rem">
+                        Delete
+                      </button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted" style="font-size: 0.8rem">—</span>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" class="px-3 py-3 text-muted text-center">No users found.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

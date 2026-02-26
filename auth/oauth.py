@@ -85,21 +85,37 @@ if _cfg.oidc_client_id and _cfg.oidc_client_secret and _cfg.oidc_discovery_url:
 # ---------------------------------------------------------------------------
 
 
-def get_enabled_providers() -> list[dict]:
-    """Return metadata for every configured OAuth provider.
+def get_enabled_providers(app_settings: dict | None = None) -> list[dict]:
+    """Return metadata for every configured and enabled OAuth provider.
 
-    Used by GET /api/v1/auth/providers and the login template to render
-    provider buttons dynamically. Only providers with both client ID and
-    secret configured are included.
+    Used by GET /api/v1/auth/providers and the login/settings templates.
+    A provider is included only when:
+      1. Both client ID and secret are configured in env vars (mandatory).
+      2. The corresponding toggle in app_settings is True (or no app_settings
+         dict is provided, which means DB state is unavailable -- fall through
+         to env-var-only behavior for backwards compatibility).
+
+    Args:
+        app_settings: Optional dict from UserStore.get_app_settings(). When
+            provided, the github_oauth_enabled and google_oauth_enabled flags
+            gate inclusion. When None (e.g. the API /providers endpoint which
+            has no DB context), env var presence alone determines inclusion.
 
     Returns list of {"name": str, "label": str} dicts.
     """
     cfg = get_settings()
     providers: list[dict] = []
-    if cfg.github_client_id and cfg.github_client_secret:
+
+    github_env_ok = bool(cfg.github_client_id and cfg.github_client_secret)
+    github_db_ok = app_settings is None or bool(app_settings.get("github_oauth_enabled", True))
+    if github_env_ok and github_db_ok:
         providers.append({"name": "github", "label": "GitHub"})
-    if cfg.google_client_id and cfg.google_client_secret:
+
+    google_env_ok = bool(cfg.google_client_id and cfg.google_client_secret)
+    google_db_ok = app_settings is None or bool(app_settings.get("google_oauth_enabled", True))
+    if google_env_ok and google_db_ok:
         providers.append({"name": "google", "label": "Google"})
+
     if cfg.oidc_client_id and cfg.oidc_client_secret and cfg.oidc_discovery_url:
         providers.append({"name": "oidc", "label": cfg.oidc_display_name})
     return providers

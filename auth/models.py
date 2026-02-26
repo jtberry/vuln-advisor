@@ -37,6 +37,7 @@ class User:
     user_preferences: str | None = None  # JSON blob (Phase 3 dashboard config)
     created_at: str | None = None
     is_active: bool = True
+    last_login: str = ""  # ISO 8601 timestamp of last successful authentication
 
 
 @dataclass

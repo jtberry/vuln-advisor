@@ -34,8 +34,13 @@ Routes:
   POST /setup                                         -- create first admin
   GET  /register                                      -- registration form
   POST /register                                      -- create user account (role="user")
+  GET  /settings                                      -- user settings (session duration, password change)
+  POST /settings                                      -- save user settings
+  GET  /admin/settings                                -- admin settings (OAuth, registration, user management)
+  POST /admin/settings                                -- save admin settings
 """
 
+import json
 import logging
 import re
 from datetime import date, datetime, timezone
@@ -1153,6 +1158,7 @@ async def oauth_callback(request: Request, provider: str) -> RedirectResponse:
         return RedirectResponse("/login?error=account_disabled", status_code=302)
 
     # Step 6: Issue JWT, set cookie, redirect
+    user_store.update_last_login(user.id)  # stamp last_login on successful OAuth auth
     duration = get_session_duration(user.user_preferences)
     token_str = create_access_token(user.id, user.username, user.role, expire_seconds=duration)
     next_url = _safe_next(request.query_params.get("next"))  # [C2]
@@ -1183,7 +1189,7 @@ def login_form(request: Request, response: Response, csrf_protect: CsrfProtect =
             "flash_message": flash_message,
             "providers": providers,
             "csrf_token": csrf_token,
-            "registration_enabled": _is_registration_enabled(),
+            "registration_enabled": _is_registration_enabled(request),
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, resp)
@@ -1204,6 +1210,7 @@ async def login_post(
     if user is None:
         return RedirectResponse("/login?error=bad_credentials", status_code=302)
 
+    user_store.update_last_login(user.id)  # stamp last_login on successful auth
     duration = get_session_duration(user.user_preferences)
     token = create_access_token(user.id, user.username, user.role, expire_seconds=duration)
     next_url = _safe_next(request.query_params.get("next"))  # [C2]
@@ -1332,18 +1339,20 @@ async def setup_post(
 _USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
 
 
-def _is_registration_enabled() -> bool:
+def _is_registration_enabled(request: Request) -> bool:
     """Return True if self-registration is currently enabled.
 
-    Reads from the centralized settings object. This indirection exists so
-    that a future plan can redirect this single function to an app_settings
-    DB table without modifying the registration routes themselves (open/closed
-    principle -- the route logic is closed for modification; the config source
-    is open for extension).
-    """
-    from core.config import get_settings
+    DB app_settings is the runtime source of truth. The env var
+    SELF_REGISTRATION_ENABLED in core/config.py is the initial default;
+    once the admin has toggled the setting in the UI the DB value overrides it.
 
-    return get_settings().self_registration_enabled
+    Accepts request so it can reach app.state.user_store without making
+    UserStore a module-level global. Option A from the plan: explicit is
+    better than implicit.
+    """
+    user_store: UserStore = request.app.state.user_store
+    app_settings = user_store.get_app_settings()
+    return bool(app_settings.get("self_registration_enabled", True))
 
 
 # ---------------------------------------------------------------------------
@@ -1359,7 +1368,7 @@ def register_form(request: Request, response: Response, csrf_protect: CsrfProtec
     rather than returning a 404 or 403. This avoids leaking whether the feature
     exists while still giving a useful explanation to legitimate users.
     """
-    if not _is_registration_enabled():
+    if not _is_registration_enabled(request):
         request.session["flash"] = "Registration is currently disabled."
         return RedirectResponse("/login", status_code=302)
     # Redirect already-authenticated users away from the registration page
@@ -1408,7 +1417,7 @@ async def register_post(
     await csrf_protect.validate_csrf(request)
 
     # Defense in depth: re-check toggle on POST as well [C5]
-    if not _is_registration_enabled():
+    if not _is_registration_enabled(request):
         request.session["flash"] = "Registration is currently disabled."
         return RedirectResponse("/login", status_code=302)
 
@@ -1468,3 +1477,279 @@ async def register_post(
     set_auth_cookie(resp, token)
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+# ---------------------------------------------------------------------------
+# Settings routes
+# ---------------------------------------------------------------------------
+
+# Valid session duration values (seconds). Whitelist prevents arbitrary values.
+_VALID_SESSION_DURATIONS = {3600, 14400, 28800}
+
+
+def _require_admin_redirect(request: Request) -> Optional[tuple]:
+    """Check if the current user is authenticated AND is an admin.
+
+    Returns (None, user) if access is allowed, or (RedirectResponse, None) if
+    not. Combines the auth check and the role check into one call.
+    """
+    user = try_get_current_user(request)
+    if user is None:
+        request.session["flash"] = "Please log in to access this page."
+        path = request.url.path
+        return RedirectResponse(f"/login?next={path}", status_code=302), None
+    if user.role != "admin":
+        request.session["flash"] = "Admin access required."
+        return RedirectResponse("/", status_code=302), None
+    return None, user
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()) -> HTMLResponse:
+    """Render the user settings page: session duration picker and password change."""
+    if redirect := _require_auth(request):
+        return redirect
+    user = try_get_current_user(request)
+    # Extract current session duration from user_preferences JSON blob
+    current_duration = 3600
+    if user.user_preferences:
+        try:
+            prefs = json.loads(user.user_preferences)
+            current_duration = int(prefs.get("session_duration_seconds", 3600))
+        except (ValueError, TypeError):
+            current_duration = 3600
+
+    flash_message = request.session.pop("flash", None)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    resp = templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "user": user,
+            "current_duration": current_duration,
+            "csrf_token": csrf_token,
+            "flash_message": flash_message,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, resp)
+    return resp
+
+
+@router.post("/settings", response_class=HTMLResponse)
+async def settings_post(
+    request: Request,
+    response: Response,
+    action: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
+) -> HTMLResponse:
+    """Handle user settings form submissions.
+
+    Two actions are handled via the `action` hidden field:
+      - "session_duration": update session duration preference
+      - "change_password": validate and update password hash
+
+    Both redirect back to /settings on success (POST/Redirect/GET pattern).
+    """
+    await csrf_protect.validate_csrf(request)
+
+    if redirect := _require_auth(request):
+        return redirect
+
+    user = try_get_current_user(request)
+    user_store: UserStore = request.app.state.user_store
+
+    form_data = await request.form()
+
+    def _settings_error(msg: str, current_duration: int = 3600) -> HTMLResponse:
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        err_resp = templates.TemplateResponse(
+            "settings.html",
+            {
+                "request": request,
+                "user": user,
+                "current_duration": current_duration,
+                "csrf_token": csrf_token,
+                "error_msg": msg,
+                "flash_message": None,
+            },
+        )
+        csrf_protect.set_csrf_cookie(signed_token, err_resp)
+        return err_resp
+
+    if action == "session_duration":
+        raw_duration = form_data.get("session_duration", "")
+        try:
+            duration_int = int(raw_duration)
+        except (ValueError, TypeError):
+            return _settings_error("Invalid session duration.")
+        if duration_int not in _VALID_SESSION_DURATIONS:
+            return _settings_error("Session duration must be 1, 4, or 8 hours.")
+
+        # Merge into existing user_preferences JSON blob
+        prefs: dict = {}
+        if user.user_preferences:
+            try:
+                prefs = json.loads(user.user_preferences)
+            except (ValueError, TypeError):
+                prefs = {}
+        prefs["session_duration_seconds"] = duration_int
+        user_store.update_user(user.id, user_preferences=json.dumps(prefs))
+        request.session["flash"] = "Session duration updated."
+        return RedirectResponse("/settings", status_code=303)
+
+    elif action == "change_password":
+        current_password = form_data.get("current_password", "")
+        new_password = form_data.get("new_password", "")
+        confirm_password = form_data.get("confirm_password", "")
+
+        # Current duration for re-render if error
+        current_duration = 3600
+        if user.user_preferences:
+            try:
+                prefs = json.loads(user.user_preferences)
+                current_duration = int(prefs.get("session_duration_seconds", 3600))
+            except (ValueError, TypeError):
+                current_duration = 3600
+
+        if not user.hashed_password:
+            return _settings_error("Password change is not available for OAuth-only accounts.", current_duration)
+
+        from auth.tokens import verify_password
+
+        if not verify_password(current_password, user.hashed_password):
+            return _settings_error("Current password is incorrect.", current_duration)
+        if new_password != confirm_password:
+            return _settings_error("New passwords do not match.", current_duration)
+        pw_error = _validate_password(new_password)
+        if pw_error:
+            return _settings_error(pw_error, current_duration)
+
+        user_store.update_user(user.id, hashed_password=hash_password(new_password))
+        request.session["flash"] = "Password changed successfully."
+        return RedirectResponse("/settings", status_code=303)
+
+    else:
+        return _settings_error("Unknown action.")
+
+
+@router.get("/admin/settings", response_class=HTMLResponse)
+def admin_settings_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()) -> HTMLResponse:
+    """Render the admin settings page: OAuth toggles, registration toggle, user management."""
+    redirect, current_user = _require_admin_redirect(request)
+    if redirect:
+        return redirect
+
+    user_store: UserStore = request.app.state.user_store
+    app_settings = user_store.get_app_settings()
+    all_users = user_store.list_users()
+    enabled_providers = get_enabled_providers()  # env-var level (what's configured)
+
+    flash_message = request.session.pop("flash", None)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    resp = templates.TemplateResponse(
+        "admin_settings.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "app_settings": app_settings,
+            "users": all_users,
+            "enabled_providers": enabled_providers,
+            "csrf_token": csrf_token,
+            "flash_message": flash_message,
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, resp)
+    return resp
+
+
+@router.post("/admin/settings", response_class=HTMLResponse)
+async def admin_settings_post(
+    request: Request,
+    response: Response,
+    action: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
+) -> HTMLResponse:
+    """Handle admin settings form submissions.
+
+    Actions (dispatched via hidden `action` field):
+      - "toggle_settings": update self_registration/OAuth toggles
+      - "delete_user": delete a user by user_id
+      - "toggle_admin": promote/demote a user to/from admin role
+
+    Each action redirects back to /admin/settings on success.
+    """
+    await csrf_protect.validate_csrf(request)
+
+    redirect, current_user = _require_admin_redirect(request)
+    if redirect:
+        return redirect
+
+    user_store: UserStore = request.app.state.user_store
+    form_data = await request.form()
+
+    if action == "toggle_settings":
+        updates = {
+            "self_registration_enabled": form_data.get("self_registration_enabled") == "1",
+            "github_oauth_enabled": form_data.get("github_oauth_enabled") == "1",
+            "google_oauth_enabled": form_data.get("google_oauth_enabled") == "1",
+        }
+        user_store.update_app_settings(**updates)
+        request.session["flash"] = "Settings updated."
+        return RedirectResponse("/admin/settings", status_code=303)
+
+    elif action == "delete_user":
+        raw_id = form_data.get("user_id", "")
+        try:
+            target_id = int(raw_id)
+        except (ValueError, TypeError):
+            request.session["flash"] = "Invalid user ID."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        if target_id == current_user.id:
+            request.session["flash"] = "You cannot delete your own account."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        target = user_store.get_by_id(target_id)
+        if target is None:
+            request.session["flash"] = "User not found."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        # Prevent deleting the last admin
+        if target.role == "admin" and user_store.count_active_admins() <= 1:
+            request.session["flash"] = "Cannot delete the last active admin account."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        user_store.delete_user(target_id)
+        request.session["flash"] = f"User '{target.username}' deleted."
+        return RedirectResponse("/admin/settings", status_code=303)
+
+    elif action == "toggle_admin":
+        raw_id = form_data.get("user_id", "")
+        try:
+            target_id = int(raw_id)
+        except (ValueError, TypeError):
+            request.session["flash"] = "Invalid user ID."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        if target_id == current_user.id:
+            request.session["flash"] = "You cannot change your own admin status."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        target = user_store.get_by_id(target_id)
+        if target is None:
+            request.session["flash"] = "User not found."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        # Prevent removing admin from last admin
+        new_role = "user" if target.role == "admin" else "admin"
+        if new_role == "user" and user_store.count_active_admins() <= 1:
+            request.session["flash"] = "Cannot remove admin status from the last active admin."
+            return RedirectResponse("/admin/settings", status_code=303)
+
+        user_store.update_user(target_id, role=new_role)
+        request.session["flash"] = f"User '{target.username}' role set to '{new_role}'."
+        return RedirectResponse("/admin/settings", status_code=303)
+
+    else:
+        request.session["flash"] = "Unknown action."
+        return RedirectResponse("/admin/settings", status_code=303)
