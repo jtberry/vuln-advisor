@@ -124,6 +124,11 @@ def _safe_next(next_url: Optional[str]) -> str:
     return "/"
 
 
+def _get_flash(request: Request) -> str:
+    """Pop flash message from session if present."""
+    return request.session.pop("flash", "")
+
+
 def _require_auth(request: Request) -> Optional[RedirectResponse]:
     """Check if the current request is authenticated.
 
@@ -134,6 +139,7 @@ def _require_auth(request: Request) -> Optional[RedirectResponse]:
     """
     user = try_get_current_user(request)
     if user is None:
+        request.session["flash"] = "Please log in to access this page."
         path = request.url.path
         return RedirectResponse(f"/login?next={path}", status_code=302)
     return None
@@ -274,6 +280,7 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
             "page": page,
             "total_pages": total_pages,
             "page_size": _PAGE_SIZE,
+            "flash_message": _get_flash(request),
         },
     )
 
@@ -286,7 +293,7 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
 @router.get("/cve", response_class=HTMLResponse)
 def cve_research(request: Request) -> HTMLResponse:
     """Render the CVE research page: single lookup + bulk triage."""
-    return templates.TemplateResponse("cve_research.html", {"request": request})
+    return templates.TemplateResponse("cve_research.html", {"request": request, "flash_message": _get_flash(request)})
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +437,7 @@ def cve_detail(
             "affected_assets": affected_assets,
             "nvd_url": _NVD_URL.format(cve_id=normalized),
             "cvss_row_css": _cvss_row_css,
+            "flash_message": _get_flash(request),
         },
     )
 
@@ -446,7 +454,13 @@ def asset_create_form(request: Request) -> HTMLResponse:
         return redirect
     return templates.TemplateResponse(
         "assets_form.html",
-        {"request": request, "error": None, "form_data": {}, "compliance_options": _COMPLIANCE_OPTIONS},
+        {
+            "request": request,
+            "error": None,
+            "form_data": {},
+            "compliance_options": _COMPLIANCE_OPTIONS,
+            "flash_message": _get_flash(request),
+        },
     )
 
 
@@ -596,6 +610,7 @@ def asset_detail(request: Request, asset_id: int) -> HTMLResponse:
             "asset_id": asset_id,
             "statuses": _STATUSES,
             "eol_info": _eol_info(asset.eol_date),
+            "flash_message": _get_flash(request),
         },
     )
 
@@ -778,6 +793,7 @@ def asset_edit_form(request: Request, asset_id: int) -> HTMLResponse:
             "form_data": form_data,
             "error": None,
             "compliance_options": _COMPLIANCE_OPTIONS,
+            "flash_message": _get_flash(request),
         },
     )
 
@@ -898,7 +914,7 @@ def ingest_form(request: Request) -> HTMLResponse:
     """Render the scanner file ingest form."""
     if redirect := _require_auth(request):
         return redirect
-    return templates.TemplateResponse("ingest.html", {"request": request})
+    return templates.TemplateResponse("ingest.html", {"request": request, "flash_message": _get_flash(request)})
 
 
 # ---------------------------------------------------------------------------
