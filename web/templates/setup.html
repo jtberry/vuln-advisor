@@ -31,6 +31,7 @@
         {% endif %}
 
         <form method="post" action="/setup">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="mb-3">
             <label for="username" class="form-label text-secondary" style="font-size: 0.85rem">
               Admin username

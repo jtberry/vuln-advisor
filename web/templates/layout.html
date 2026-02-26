@@ -109,9 +109,7 @@
           " style="font-size: 0.7rem">{{ current_user.role }}</span>
       </li>
       <li class="nav-item">
-        <form method="post" action="/logout" class="d-inline">
-          <button type="submit" class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">Logout</button>
-        </form>
+        <a href="/logout" class="btn btn-sm btn-outline-secondary" style="font-size: 0.8rem">Logout</a>
       </li>
     {% else %}
       <li class="nav-item">
@@ -122,6 +120,12 @@
 </nav>
 
 <main class="container-fluid px-4 py-4" style="max-width: 1400px">
+  {% if flash_message %}
+  <div class="alert alert-warning alert-dismissible fade show mx-0 mt-0 mb-3" role="alert">
+    {{ flash_message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+  {% endif %}
   {% block content %}{% endblock %}
 </main>
 

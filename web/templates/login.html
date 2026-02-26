@@ -24,6 +24,7 @@
 
         <!-- Username / Password form -->
         <form method="post" action="/login{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="mb-3">
             <label for="username" class="form-label text-secondary" style="font-size: 0.85rem">Username</label>
             <input
@@ -64,7 +65,7 @@
             href="/login/oauth/{{ provider.name }}{% if request.query_params.get('next') %}?next={{ request.query_params.get('next') }}{% endif %}"
             class="btn btn-outline-secondary btn-sm"
           >
-            Continue with {{ provider.label }}
+            Sign in with {{ provider.label }}
           </a>
           {% endfor %}
         </div>
