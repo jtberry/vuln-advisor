@@ -30,7 +30,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine, text
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from auth.models import ApiKey, User
@@ -76,6 +76,21 @@ _api_keys = Table(
 
 
 # ---------------------------------------------------------------------------
+# WAL mode
+# ---------------------------------------------------------------------------
+
+
+def _set_wal_mode(dbapi_conn, connection_record) -> None:
+    """Enable WAL journal mode for concurrent read safety.
+
+    WAL (Write-Ahead Logging) allows readers to proceed without blocking
+    during writes. Set per-connection because SQLite PRAGMAs are not
+    inherited by new connections from the pool.
+    """
+    dbapi_conn.execute("PRAGMA journal_mode=WAL")
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -108,6 +123,8 @@ class UserStore:
         if db_url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
         self.engine: Engine = create_engine(db_url, connect_args=connect_args)
+        if db_url.startswith("sqlite"):
+            event.listen(self.engine, "connect", _set_wal_mode)
         _metadata.create_all(self.engine)
         self._ensure_app_settings()
         self._ensure_last_login_column()

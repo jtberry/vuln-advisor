@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, text
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, UniqueConstraint, create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from cmdb.models import Asset, AssetVulnerability, RemediationRecord
@@ -172,6 +172,21 @@ def _migrate_vulns_table(conn) -> None:
 
 
 # ---------------------------------------------------------------------------
+# WAL mode
+# ---------------------------------------------------------------------------
+
+
+def _set_wal_mode(dbapi_conn, connection_record) -> None:
+    """Enable WAL journal mode for concurrent read safety.
+
+    WAL (Write-Ahead Logging) allows readers to proceed without blocking
+    during writes. Set per-connection because SQLite PRAGMAs are not
+    inherited by new connections from the pool.
+    """
+    dbapi_conn.execute("PRAGMA journal_mode=WAL")
+
+
+# ---------------------------------------------------------------------------
 # Repository
 # ---------------------------------------------------------------------------
 
@@ -185,6 +200,8 @@ class CMDBStore:
             # threads managed by the ASGI server.
             connect_args["check_same_thread"] = False
         self.engine: Engine = create_engine(db_url, connect_args=connect_args)
+        if db_url.startswith("sqlite"):
+            event.listen(self.engine, "connect", _set_wal_mode)
         metadata.create_all(self.engine)
         with self.engine.connect() as conn:
             _migrate_assets_table(conn)
