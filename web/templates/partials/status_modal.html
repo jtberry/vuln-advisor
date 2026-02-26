@@ -1,0 +1,329 @@
+{#
+  partials/status_modal.html -- Bootstrap 5.3 modal for single and bulk vuln status changes.
+
+  Included ONCE in asset_detail.html. The modal is reused for all rows.
+
+  Single-vuln mode:
+    - Triggered by clicking a .status-badge on a vuln row
+    - Performs optimistic DOM update on the badge, then PATCH to API
+    - On PATCH failure, reverts badge and shows error toast
+
+  Bulk mode:
+    - Triggered by the "Change Status" button in the bulk toolbar
+    - Fires one PATCH per selected CVE via Promise.all
+    - On completion (success or partial failure), reloads the page
+
+  Dependencies:
+    - Bootstrap 5.3 (modal, toast) -- already loaded in layout.html
+    - #toastContainer in asset_detail.html (also injected there)
+    - asset_id Jinja2 variable (available in asset_detail.html context)
+#}
+
+{# ── Status Modal ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="statusModal" tabindex="-1" aria-labelledby="statusModalLabel" aria-hidden="true"
+     data-asset-id="{{ asset_id }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background-color: #161b22; border-color: #30363d">
+
+      <div class="modal-header" style="border-color: #21262d">
+        <h6 class="modal-title fw-semibold" id="statusModalLabel" style="color: #e6edf3">
+          Update Status
+        </h6>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+
+        {# Bulk context: shows selected CVE list (hidden in single mode) #}
+        <div id="modalBulkContext" class="mb-3 d-none">
+          <div class="text-muted mb-1" style="font-size: 0.78rem">
+            Updating <strong id="modalBulkCount" style="color: #e6edf3">0</strong> selected vulnerabilities:
+          </div>
+          <div id="modalBulkCveList"
+               class="font-mono"
+               style="font-size: 0.72rem; color: #8b949e; max-height: 80px; overflow-y: auto;
+                      background-color: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 6px 8px">
+          </div>
+        </div>
+
+        {# Status select #}
+        <div class="mb-3">
+          <label for="modalStatusSelect" class="form-label text-muted mb-1" style="font-size: 0.78rem">
+            New Status
+          </label>
+          <select id="modalStatusSelect"
+                  class="form-select form-select-sm"
+                  style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem">
+            <option value="open">Open</option>
+            <option value="in_review">In Review</option>
+            <option value="remediated">Remediated</option>
+            <option value="closed">Closed</option>
+            <option value="deferred">Deferred</option>
+          </select>
+        </div>
+
+        {# Evidence / note textarea #}
+        <div class="mb-1">
+          <label for="modalEvidence" class="form-label text-muted mb-1" style="font-size: 0.78rem">
+            Note / Evidence
+            <span class="text-muted" style="font-size: 0.7rem">(optional)</span>
+          </label>
+          <textarea id="modalEvidence"
+                    class="form-control form-control-sm"
+                    rows="3"
+                    maxlength="1000"
+                    style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.8rem; resize: vertical"
+                    placeholder="Optional: reason for status change (recorded in audit trail)"></textarea>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="border-color: #21262d">
+        <button type="button"
+                class="btn btn-sm"
+                data-bs-dismiss="modal"
+                style="font-size: 0.78rem; background-color: #21262d; border-color: #30363d; color: #8b949e">
+          Cancel
+        </button>
+        <button type="button"
+                id="statusSaveBtn"
+                class="btn btn-primary btn-sm"
+                style="font-size: 0.78rem">
+          Save
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── Badge color map ────────────────────────────────────────────────
+  var STATUS_BADGE = {
+    open:        { cls: "bg-secondary",              text: "Open" },
+    in_review:   { cls: "bg-info text-dark",         text: "In Review" },
+    remediated:  { cls: "bg-success",                text: "Remediated" },
+    closed:      { cls: "closed-badge",              text: "Closed" },
+    deferred:    { cls: "bg-warning text-dark",      text: "Deferred" }
+  };
+
+  // ── Toast helper ───────────────────────────────────────────────────
+  // Creates a Bootstrap 5 toast element dynamically and auto-removes it.
+  function showToast(message, variant) {
+    var container = document.getElementById("toastContainer");
+    if (!container) return;
+
+    var el = document.createElement("div");
+    el.className = "toast align-items-center text-bg-" + variant + " border-0";
+    el.setAttribute("role", "alert");
+    el.setAttribute("aria-live", "assertive");
+    el.setAttribute("aria-atomic", "true");
+    el.innerHTML = [
+      '<div class="d-flex">',
+      '  <div class="toast-body" style="font-size: 0.82rem">' + message + "</div>",
+      '  <button type="button" class="btn-close btn-close-white me-2 m-auto"',
+      '          data-bs-dismiss="toast" aria-label="Close"></button>',
+      "</div>"
+    ].join("");
+
+    container.appendChild(el);
+
+    var toast = new bootstrap.Toast(el, { delay: 4000 });
+    toast.show();
+
+    el.addEventListener("hidden.bs.toast", function () {
+      el.remove();
+    });
+  }
+
+  // ── Badge update helper ───────────────────────────────────────────
+  // Applies a new status to a badge element in place.
+  function applyStatusBadge(badgeEl, status) {
+    var def = STATUS_BADGE[status];
+    if (!def) return;
+
+    // Strip all known badge color classes before applying new one
+    var allClasses = [
+      "bg-secondary", "bg-info", "text-dark", "bg-success",
+      "bg-warning", "closed-badge"
+    ];
+    allClasses.forEach(function (cls) {
+      badgeEl.classList.remove(cls);
+    });
+
+    // Apply new classes (may be multiple space-separated)
+    def.cls.split(" ").forEach(function (cls) {
+      if (cls) badgeEl.classList.add(cls);
+    });
+
+    badgeEl.textContent = def.text;
+    // Keep the data attribute in sync for subsequent clicks
+    badgeEl.dataset.currentStatus = status;
+  }
+
+  // ── Save button handler ───────────────────────────────────────────
+  document.getElementById("statusSaveBtn").addEventListener("click", function () {
+    var modal    = document.getElementById("statusModal");
+    var mode     = modal.dataset.mode || "single";
+    var assetId  = modal.dataset.assetId;
+    var newStatus = document.getElementById("modalStatusSelect").value;
+    var evidence  = document.getElementById("modalEvidence").value.trim();
+
+    var bsModal = bootstrap.Modal.getOrCreateInstance(modal);
+
+    if (mode === "single") {
+      var cveId          = modal.dataset.cveId;
+      var originalStatus = modal.dataset.originalStatus;
+
+      // Find the badge element for this CVE row
+      var row    = document.querySelector("tr[data-cve='" + cveId + "']");
+      var badge  = row ? row.querySelector(".status-badge") : null;
+
+      // Optimistic update: apply new status immediately in the DOM
+      var savedClass = badge ? badge.className : "";
+      var savedText  = badge ? badge.textContent : "";
+      if (badge) {
+        applyStatusBadge(badge, newStatus);
+      }
+
+      bsModal.hide();
+
+      var body = { status: newStatus };
+      if (evidence) body.evidence = evidence;
+
+      fetch(
+        "/api/v1/assets/" + assetId + "/vulnerabilities/" + cveId + "/status",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        }
+      )
+        .then(function (resp) {
+          if (!resp.ok) {
+            // Revert optimistic update on failure
+            if (badge) {
+              badge.className = savedClass;
+              badge.textContent = savedText;
+              badge.dataset.currentStatus = originalStatus;
+            }
+            return resp.json().catch(function () { return {}; }).then(function (data) {
+              showToast(
+                "Failed to update status" + (data.detail ? ": " + data.detail : ""),
+                "danger"
+              );
+            });
+          }
+          return resp.json().then(function () {
+            showToast(
+              "Status updated to <strong>" + (STATUS_BADGE[newStatus] ? STATUS_BADGE[newStatus].text : newStatus) + "</strong>",
+              "success"
+            );
+          });
+        })
+        .catch(function () {
+          // Network error -- revert
+          if (badge) {
+            badge.className = savedClass;
+            badge.textContent = savedText;
+            badge.dataset.currentStatus = originalStatus;
+          }
+          showToast("Network error -- status update failed", "danger");
+        });
+
+    } else {
+      // Bulk mode: fire one PATCH per CVE, then reload
+      var bulkCves = JSON.parse(modal.dataset.bulkCves || "[]");
+
+      bsModal.hide();
+
+      var body = { status: newStatus };
+      if (evidence) body.evidence = evidence;
+
+      var requests = bulkCves.map(function (cveId) {
+        return fetch(
+          "/api/v1/assets/" + assetId + "/vulnerabilities/" + cveId + "/status",
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          }
+        ).then(function (resp) {
+          return { cveId: cveId, ok: resp.ok };
+        }).catch(function () {
+          return { cveId: cveId, ok: false };
+        });
+      });
+
+      Promise.all(requests).then(function (results) {
+        var failed = results.filter(function (r) { return !r.ok; }).length;
+        if (failed === 0) {
+          showToast("Updated " + bulkCves.length + " vulnerabilities", "success");
+        } else {
+          showToast(
+            failed + " update" + (failed > 1 ? "s" : "") + " failed -- refresh to see results",
+            "danger"
+          );
+        }
+        // Always reload after bulk operation so the table reflects actual state
+        setTimeout(function () { location.reload(); }, 1200);
+      });
+    }
+  });
+
+  // ── Modal show event: populate fields from trigger element ─────────
+  document.getElementById("statusModal").addEventListener("show.bs.modal", function (event) {
+    var modal      = this;
+    var trigger    = event.relatedTarget;
+    var modeHeader = document.getElementById("statusModalLabel");
+    var bulkCtx    = document.getElementById("modalBulkContext");
+    var select     = document.getElementById("modalStatusSelect");
+    var evidence   = document.getElementById("modalEvidence");
+
+    // Clear evidence on every open
+    evidence.value = "";
+
+    if (modal.dataset.mode === "bulk") {
+      // Bulk mode -- populated by the bulk button JS in asset_detail.html
+      modeHeader.textContent = "Bulk Update Status";
+      bulkCtx.classList.remove("d-none");
+
+      var cves       = JSON.parse(modal.dataset.bulkCves || "[]");
+      var countEl    = document.getElementById("modalBulkCount");
+      var listEl     = document.getElementById("modalBulkCveList");
+      countEl.textContent = cves.length;
+
+      var displayed  = cves.slice(0, 5);
+      var overflow   = cves.length - displayed.length;
+      listEl.textContent = displayed.join(", ") + (overflow > 0 ? " … and " + overflow + " more" : "");
+
+      // Reset select to first option in bulk mode (no pre-selection)
+      select.value = "open";
+
+    } else {
+      // Single mode -- read context from the badge that was clicked
+      if (trigger) {
+        modal.dataset.mode          = "single";
+        modal.dataset.cveId         = trigger.dataset.cve;
+        modal.dataset.originalStatus = trigger.dataset.currentStatus;
+      }
+
+      modeHeader.textContent = "Update Status";
+      bulkCtx.classList.add("d-none");
+
+      var currentStatus = modal.dataset.originalStatus || "open";
+      select.value = currentStatus;
+    }
+  });
+
+  // ── Reset mode when modal fully closes ────────────────────────────
+  document.getElementById("statusModal").addEventListener("hidden.bs.modal", function () {
+    this.dataset.mode = "single";
+    this.dataset.bulkCves = "[]";
+  });
+
+}());
+</script>
