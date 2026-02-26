@@ -1177,6 +1177,7 @@ def login_form(request: Request, response: Response, csrf_protect: CsrfProtect =
             "flash_message": flash_message,
             "providers": providers,
             "csrf_token": csrf_token,
+            "registration_enabled": _is_registration_enabled(),
         },
     )
     csrf_protect.set_csrf_cookie(signed_token, resp)
@@ -1311,6 +1312,151 @@ async def setup_post(
     # without needing to re-enter credentials. Pattern: create token -> set cookie
     # -> return redirect (cookie attaches to RedirectResponse, not the final page).
     token = create_access_token(new_user_id, new_admin.username, new_admin.role)
+    resp = RedirectResponse("/dashboard", status_code=302)
+    set_auth_cookie(resp, token)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# Registration helpers
+# ---------------------------------------------------------------------------
+
+_USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
+def _is_registration_enabled() -> bool:
+    """Return True if self-registration is currently enabled.
+
+    Reads from the centralized settings object. This indirection exists so
+    that a future plan can redirect this single function to an app_settings
+    DB table without modifying the registration routes themselves (open/closed
+    principle -- the route logic is closed for modification; the config source
+    is open for extension).
+    """
+    from core.config import get_settings
+
+    return get_settings().self_registration_enabled
+
+
+# ---------------------------------------------------------------------------
+# GET /register -- registration form
+# ---------------------------------------------------------------------------
+
+
+@router.get("/register", response_class=HTMLResponse)
+def register_form(request: Request, response: Response, csrf_protect: CsrfProtect = Depends()) -> HTMLResponse:
+    """Render the user registration page.
+
+    If self-registration is disabled, redirects to /login with a flash message
+    rather than returning a 404 or 403. This avoids leaking whether the feature
+    exists while still giving a useful explanation to legitimate users.
+    """
+    if not _is_registration_enabled():
+        request.session["flash"] = "Registration is currently disabled."
+        return RedirectResponse("/login", status_code=302)
+    # Redirect already-authenticated users away from the registration page
+    if try_get_current_user(request) is not None:
+        return RedirectResponse("/", status_code=302)
+    flash_message = request.session.pop("flash", None)
+    csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+    resp = templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "flash_message": flash_message,
+            "csrf_token": csrf_token,
+            "username": "",
+        },
+    )
+    csrf_protect.set_csrf_cookie(signed_token, resp)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# POST /register -- create user account
+# ---------------------------------------------------------------------------
+
+
+@router.post("/register", response_class=HTMLResponse)
+async def register_post(
+    request: Request,
+    response: Response,
+    username: str = Form(...),
+    password: str = Form(...),
+    confirm_password: str = Form(...),
+    csrf_protect: CsrfProtect = Depends(),
+) -> HTMLResponse:
+    """Handle the registration form submission.
+
+    Security decisions:
+      - Registration always creates role="user" -- admins are only created via /setup
+        or by an existing admin. This prevents privilege escalation through registration.
+      - Username is validated against a strict allowlist regex (3-30 chars,
+        alphanumeric + underscores) to prevent injection and confusable usernames.
+      - Self-registration toggle is re-checked here (defense in depth -- a crafted
+        direct POST must not bypass the GET-level check).
+      - Passwords must pass the shared _validate_password() complexity rules.
+    """
+    await csrf_protect.validate_csrf(request)
+
+    # Defense in depth: re-check toggle on POST as well [C5]
+    if not _is_registration_enabled():
+        request.session["flash"] = "Registration is currently disabled."
+        return RedirectResponse("/login", status_code=302)
+
+    user_store: UserStore = request.app.state.user_store
+
+    def _register_error(msg: str, prefill_username: str = "") -> HTMLResponse:
+        """Re-render register form with error message and a fresh CSRF token."""
+        csrf_token, signed_token = csrf_protect.generate_csrf_tokens()
+        err_resp = templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "error_msg": msg,
+                "csrf_token": csrf_token,
+                "username": prefill_username,
+            },
+        )
+        csrf_protect.set_csrf_cookie(signed_token, err_resp)
+        return err_resp
+
+    # Validate username: 3-30 chars, alphanumeric + underscores only
+    username_clean = username.strip()
+    if not username_clean:
+        return _register_error("Username is required.")
+    if len(username_clean) < 3 or len(username_clean) > 30:
+        return _register_error("Username must be between 3 and 30 characters.", username_clean)
+    if not _USERNAME_PATTERN.match(username_clean):
+        return _register_error("Username may only contain letters, numbers, and underscores.", username_clean)
+
+    # Validate passwords
+    if password != confirm_password:
+        return _register_error("Passwords do not match.", username_clean)
+    pw_error = _validate_password(password)
+    if pw_error:
+        return _register_error(pw_error, username_clean)
+
+    # Check for duplicate username
+    if user_store.get_by_username(username_clean) is not None:
+        return _register_error("That username is already taken.", username_clean)
+
+    from auth.models import User as AuthUser
+
+    new_user = AuthUser(
+        username=username_clean,
+        role="user",  # registration never grants admin -- only /setup does
+        hashed_password=hash_password(password),
+    )
+    try:
+        new_user_id: int = user_store.create_user(new_user)
+    except IntegrityError:
+        # Concurrent duplicate -- same username registered at the same time
+        return _register_error("That username is already taken.", username_clean)
+
+    # Auto-login: issue JWT and redirect to dashboard
+    token = create_access_token(new_user_id, new_user.username, new_user.role)
     resp = RedirectResponse("/dashboard", status_code=302)
     set_auth_cookie(resp, token)
     resp.headers["Cache-Control"] = "no-store"

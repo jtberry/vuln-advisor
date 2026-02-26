@@ -1,0 +1,92 @@
+{% extends "layout.html" %}
+
+{% block title %}Create Account - VulnAdvisor{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+  <div class="col-sm-10 col-md-7 col-lg-5 col-xl-4">
+
+    <div class="text-center mb-4">
+      <h1 class="h4 fw-bold">
+        <span style="color: #388bfd">Vuln</span><span style="color: #c9d1d9">Advisor</span>
+      </h1>
+      <p class="text-secondary" style="font-size: 0.9rem">Create a new account</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header py-2 px-3">
+        <span class="fw-semibold" style="font-size: 0.9rem">Create Account</span>
+      </div>
+      <div class="card-body p-4">
+
+        {% if error_msg %}
+        <div class="alert alert-danger py-2 px-3 mb-3" style="font-size: 0.875rem">
+          {{ error_msg }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/register">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="mb-3">
+            <label for="username" class="form-label text-secondary" style="font-size: 0.85rem">
+              Username
+            </label>
+            <input
+              type="text"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="username"
+              name="username"
+              autocomplete="username"
+              value="{{ username }}"
+              minlength="3"
+              maxlength="30"
+              required
+            >
+            <small class="form-text text-muted" style="font-size: 0.8rem">
+              3-30 characters. Letters, numbers, and underscores only.
+            </small>
+          </div>
+          <div class="mb-3">
+            <label for="password" class="form-label text-secondary" style="font-size: 0.85rem">
+              Password
+            </label>
+            <input
+              type="password"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="password"
+              name="password"
+              autocomplete="new-password"
+              minlength="12"
+              required
+            >
+            <small class="form-text text-muted" style="font-size: 0.8rem">
+              At least 12 characters, one uppercase letter, one number, and one special character.
+            </small>
+          </div>
+          <div class="mb-4">
+            <label for="confirm_password" class="form-label text-secondary" style="font-size: 0.85rem">
+              Confirm password
+            </label>
+            <input
+              type="password"
+              class="form-control form-control-sm bg-dark border-secondary text-light"
+              id="confirm_password"
+              name="confirm_password"
+              autocomplete="new-password"
+              minlength="12"
+              required
+            >
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Create Account</button>
+        </form>
+
+        <p class="mt-3 text-center text-secondary" style="font-size: 0.875rem">
+          Already have an account? <a href="/login">Log in</a>
+        </p>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
