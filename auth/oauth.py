@@ -1,10 +1,10 @@
 """
 auth/oauth.py -- Authlib OAuth/OIDC provider configuration.
 
-Reads environment variables at module load to decide which providers are
-active. Only providers with both client ID and secret configured get
-registered -- the login template renders buttons dynamically based on
-get_enabled_providers().
+Reads configuration from core.config.get_settings() at module load to decide
+which providers are active. Only providers with both client ID and secret
+configured get registered -- the login template renders buttons dynamically
+based on get_enabled_providers().
 
 Security notes:
   [H1] Email verification is mandatory. get_oauth_user_info() raises ValueError
@@ -22,15 +22,17 @@ Supported providers:
   google -- Authorization code flow; OIDC discovery.
   oidc   -- Generic OIDC discovery (Okta, Azure AD, Keycloak, Authentik, etc.)
 
-Layer rule: no imports from api/, web/, core/, cmdb/, or cache/.
+Layer rule: no imports from api/, web/, cmdb/, or cache/. Import from core/
+is allowed -- core/ is the kernel layer.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 
 from authlib.integrations.starlette_client import OAuth
+
+from core.config import get_settings
 
 logger = logging.getLogger("vulnadvisor.auth.oauth")
 
@@ -40,14 +42,14 @@ logger = logging.getLogger("vulnadvisor.auth.oauth")
 
 oauth = OAuth()
 
+_cfg = get_settings()
+
 # GitHub -- static endpoints (no OIDC discovery document)
-_GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
-_GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
-if _GITHUB_CLIENT_ID and _GITHUB_CLIENT_SECRET:
+if _cfg.github_client_id and _cfg.github_client_secret:
     oauth.register(
         name="github",
-        client_id=_GITHUB_CLIENT_ID,
-        client_secret=_GITHUB_CLIENT_SECRET,
+        client_id=_cfg.github_client_id,
+        client_secret=_cfg.github_client_secret,
         access_token_url="https://github.com/login/oauth/access_token",  # noqa: S106 -- URL, not a password
         authorize_url="https://github.com/login/oauth/authorize",
         api_base_url="https://api.github.com/",
@@ -56,32 +58,26 @@ if _GITHUB_CLIENT_ID and _GITHUB_CLIENT_SECRET:
     logger.info("GitHub OAuth provider registered")
 
 # Google -- OIDC discovery
-_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-_GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-if _GOOGLE_CLIENT_ID and _GOOGLE_CLIENT_SECRET:
+if _cfg.google_client_id and _cfg.google_client_secret:
     oauth.register(
         name="google",
-        client_id=_GOOGLE_CLIENT_ID,
-        client_secret=_GOOGLE_CLIENT_SECRET,
+        client_id=_cfg.google_client_id,
+        client_secret=_cfg.google_client_secret,
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
         client_kwargs={"scope": "openid email profile"},
     )
     logger.info("Google OAuth provider registered")
 
 # Generic OIDC -- Okta, Azure AD, Keycloak, Authentik, etc.
-_OIDC_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID", "")
-_OIDC_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET", "")
-_OIDC_DISCOVERY_URL = os.environ.get("OIDC_DISCOVERY_URL", "")
-_OIDC_DISPLAY_NAME = os.environ.get("OIDC_DISPLAY_NAME", "SSO")
-if _OIDC_CLIENT_ID and _OIDC_CLIENT_SECRET and _OIDC_DISCOVERY_URL:
+if _cfg.oidc_client_id and _cfg.oidc_client_secret and _cfg.oidc_discovery_url:
     oauth.register(
         name="oidc",
-        client_id=_OIDC_CLIENT_ID,
-        client_secret=_OIDC_CLIENT_SECRET,
-        server_metadata_url=_OIDC_DISCOVERY_URL,
+        client_id=_cfg.oidc_client_id,
+        client_secret=_cfg.oidc_client_secret,
+        server_metadata_url=_cfg.oidc_discovery_url,
         client_kwargs={"scope": "openid email profile"},
     )
-    logger.info("Generic OIDC provider registered (display name: %s)", _OIDC_DISPLAY_NAME)
+    logger.info("Generic OIDC provider registered (display name: %s)", _cfg.oidc_display_name)
 
 
 # ---------------------------------------------------------------------------
@@ -93,18 +89,19 @@ def get_enabled_providers() -> list[dict]:
     """Return metadata for every configured OAuth provider.
 
     Used by GET /api/v1/auth/providers and the login template to render
-    provider buttons dynamically. Only providers with both env vars set are
-    included.
+    provider buttons dynamically. Only providers with both client ID and
+    secret configured are included.
 
     Returns list of {"name": str, "label": str} dicts.
     """
+    cfg = get_settings()
     providers: list[dict] = []
-    if _GITHUB_CLIENT_ID and _GITHUB_CLIENT_SECRET:
+    if cfg.github_client_id and cfg.github_client_secret:
         providers.append({"name": "github", "label": "GitHub"})
-    if _GOOGLE_CLIENT_ID and _GOOGLE_CLIENT_SECRET:
+    if cfg.google_client_id and cfg.google_client_secret:
         providers.append({"name": "google", "label": "Google"})
-    if _OIDC_CLIENT_ID and _OIDC_CLIENT_SECRET and _OIDC_DISCOVERY_URL:
-        providers.append({"name": "oidc", "label": _OIDC_DISPLAY_NAME})
+    if cfg.oidc_client_id and cfg.oidc_client_secret and cfg.oidc_discovery_url:
+        providers.append({"name": "oidc", "label": cfg.oidc_display_name})
     return providers
 
 

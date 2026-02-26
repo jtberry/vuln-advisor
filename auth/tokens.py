@@ -16,11 +16,13 @@ Security design decisions:
        computationally infeasible. We store HMAC-SHA256(SECRET_KEY, raw_key) so
        lookup is O(1). bcrypt's intentional slowness is unnecessary here.
 
-  SECRET_KEY: validated at module load. A random fallback is generated if unset
-       (sessions won't survive restart) but a key shorter than 32 chars is
-       rejected outright with RuntimeError [M6].
+  SECRET_KEY: sourced from core.config.get_settings(). The Settings class
+       validates the key at startup: dev mode (DEBUG=true) auto-generates a
+       random key with a warning; production mode refuses to start without one.
+       Short keys (<32 chars) are rejected with ValueError [M6].
 
-Layer rule: no imports from api/, web/, core/, cmdb/, or cache/.
+Layer rule: no imports from api/, web/, cmdb/, or cache/. Import from core/
+is allowed -- core/ is the kernel and has no reverse dependencies.
 """
 
 from __future__ import annotations
@@ -28,13 +30,14 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 import bcrypt
 from jose import JWTError, jwt
+
+from core.config import get_settings
 
 if TYPE_CHECKING:
     from auth.models import User
@@ -43,21 +46,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger("vulnadvisor.auth")
 
 # ---------------------------------------------------------------------------
-# Secret key -- validated at module load [M6]
+# Config -- read once at module load via the lru_cache singleton [M6]
 # ---------------------------------------------------------------------------
 
-_SECRET_KEY: str = os.environ.get("SECRET_KEY", "")
-if not _SECRET_KEY:
-    _SECRET_KEY = secrets.token_hex(32)
-    logger.warning(
-        "SECRET_KEY not set -- random key in use. All sessions will be invalidated on restart. "
-        "Set SECRET_KEY in your environment for persistent sessions."
-    )
-if len(_SECRET_KEY) < 32:
-    raise RuntimeError("SECRET_KEY must be at least 32 characters. " "Refusing to start with a weak signing key.")
+_settings = get_settings()
 
 _ALGORITHM = "HS256"
-_TOKEN_EXPIRE_SECONDS = 8 * 3600  # 8 hours
 
 # ---------------------------------------------------------------------------
 # Password hashing (bcrypt -- direct usage, no passlib wrapper)
@@ -100,16 +94,27 @@ _DUMMY_HASH: str = hash_password("vulnadvisor_timing_dummy")
 # ---------------------------------------------------------------------------
 
 
-def create_access_token(user_id: int, username: str, role: str) -> str:
-    """Encode a signed JWT with user identity and 8-hour expiry."""
-    expire = datetime.now(timezone.utc) + timedelta(seconds=_TOKEN_EXPIRE_SECONDS)
+def create_access_token(user_id: int, username: str, role: str, expire_seconds: int = 0) -> str:
+    """Encode a signed JWT with user identity and configurable expiry.
+
+    Args:
+        user_id:        Numeric user ID stored in the DB.
+        username:       Username stored as the JWT subject claim.
+        role:           User role ("admin" or "user").
+        expire_seconds: Session duration in seconds. If 0 (default), uses
+                        the value from Settings.token_expire_seconds. Pass
+                        the user's stored preference here to honour per-user
+                        session duration (1h/4h/8h).
+    """
+    duration = expire_seconds if expire_seconds > 0 else _settings.token_expire_seconds
+    expire = datetime.now(timezone.utc) + timedelta(seconds=duration)
     payload = {
         "sub": username,
         "user_id": user_id,
         "role": role,
         "exp": expire,
     }
-    return jwt.encode(payload, _SECRET_KEY, algorithm=_ALGORITHM)
+    return jwt.encode(payload, _settings.secret_key, algorithm=_ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict | None:
@@ -119,7 +124,7 @@ def decode_access_token(token: str) -> dict | None:
     token is treated as unauthenticated. Route handlers turn None into 401.
     """
     try:
-        payload = jwt.decode(token, _SECRET_KEY, algorithms=[_ALGORITHM])
+        payload = jwt.decode(token, _settings.secret_key, algorithms=[_ALGORITHM])
         if "user_id" not in payload or "role" not in payload:
             return None
         return payload
@@ -177,7 +182,7 @@ def hash_api_key(raw_key: str) -> str:
     active keys.
     """
     return hmac.new(
-        _SECRET_KEY.encode(),
+        _settings.secret_key.encode(),
         raw_key.encode(),
         hashlib.sha256,
     ).hexdigest()
@@ -188,20 +193,29 @@ def hash_api_key(raw_key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def set_auth_cookie(response, token: str) -> None:
+def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
     """Write the JWT access token as an httpOnly cookie on the response.
 
     httponly=True: JS cannot read the cookie (XSS mitigation).
     samesite="lax": cookie sent on same-site navigations and GET cross-site
         links, but not on cross-site POST -- CSRF mitigation for most cases.
     secure: only sent over HTTPS when SECURE_COOKIES=true (set in production).
-    max_age: 8 hours, matching the JWT expiry so both expire together.
+    max_age: matches the JWT expiry so both expire together.
+
+    Args:
+        response:       FastAPI/Starlette response object.
+        token:          Encoded JWT string.
+        expire_seconds: Cookie max_age in seconds. If 0 (default), uses
+                        Settings.token_expire_seconds. Pass the same value
+                        used in create_access_token() to keep cookie and
+                        token expiry in sync.
     """
+    duration = expire_seconds if expire_seconds > 0 else _settings.token_expire_seconds
     response.set_cookie(
         "access_token",
         value=token,
         httponly=True,
         samesite="lax",
-        secure=os.environ.get("SECURE_COOKIES", "false").lower() == "true",
-        max_age=_TOKEN_EXPIRE_SECONDS,
+        secure=_settings.secure_cookies,
+        max_age=duration,
     )

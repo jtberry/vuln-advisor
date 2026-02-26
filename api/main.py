@@ -45,9 +45,9 @@ from auth.dependencies import get_current_user
 from auth.models import User
 from auth.oauth import oauth as oauth_client
 from auth.store import UserStore
-from auth.tokens import _SECRET_KEY
 from cache.store import CVECache
 from cmdb.store import CMDBStore
+from core.config import get_settings
 from core.fetcher import fetch_kev
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ app.add_middleware(SlowAPIMiddleware)
 # is set in the session before redirecting to the provider, then verified in
 # the callback. Without session middleware, authlib cannot store state and
 # the OAuth flow fails.
-app.add_middleware(SessionMiddleware, secret_key=_SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=get_settings().secret_key)
 
 # Attach the shared limiter to app.state so SlowAPIMiddleware can locate it.
 # SlowAPI looks for app.state.limiter by convention.
