@@ -174,7 +174,6 @@ class TestPriorityCounts:
 
 
 class TestGetOverdueVulns:
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_overdue_returns_past_deadline_items(self, store: CMDBStore) -> None:
         """Vulns with deadline in the past and open status appear in 'overdue' key."""
         result = store.get_overdue_vulns()
@@ -186,7 +185,6 @@ class TestGetOverdueVulns:
         assert "CVE-2021-00002" in overdue_cve_ids
         assert "CVE-2021-00005" in overdue_cve_ids
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_approaching_returns_items_within_7_days(self, store: CMDBStore) -> None:
         """Vulns with deadline within 7 days (but not yet past) appear in 'approaching'."""
         result = store.get_overdue_vulns()
@@ -197,7 +195,6 @@ class TestGetOverdueVulns:
         # CVE-2021-00004 is 60 days out -- should NOT be approaching
         assert "CVE-2021-00004" not in approaching_cve_ids
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_overdue_sorted_most_overdue_first(self, store: CMDBStore) -> None:
         """Overdue list must be ordered by days_overdue descending (worst first)."""
         result = store.get_overdue_vulns()
@@ -206,7 +203,6 @@ class TestGetOverdueVulns:
         days_list = [item["days_overdue"] for item in overdue]
         assert days_list == sorted(days_list, reverse=True)
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_overdue_excludes_closed_and_deferred(self, store: CMDBStore) -> None:
         """Closed and deferred vulns must not appear in overdue even if past deadline.
 
@@ -219,7 +215,6 @@ class TestGetOverdueVulns:
         assert "CVE-2021-00006" not in all_cve_ids
         assert "CVE-2021-00007" not in all_cve_ids
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_overdue_accepts_custom_sla_days(self, store: CMDBStore) -> None:
         """Passing a custom sla_days dict overrides the module-level _SLA_DAYS defaults."""
         # With P1=1 day SLA and a deadline 1 day ago, the item is overdue.
@@ -238,7 +233,6 @@ class TestGetOverdueVulns:
 
 
 class TestGetOpenVulnCveIds:
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_open_vuln_cve_ids()")
     def test_returns_open_vulns_with_asset_context(self, store: CMDBStore) -> None:
         """Each returned dict must include asset_id, hostname, cve_id, effective_priority, exposure."""
         results = store.get_open_vuln_cve_ids()
@@ -250,7 +244,6 @@ class TestGetOpenVulnCveIds:
             assert "effective_priority" in item, f"Missing effective_priority in {item}"
             assert "exposure" in item, f"Missing exposure in {item}"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_open_vuln_cve_ids()")
     def test_excludes_closed_and_deferred(self, store: CMDBStore) -> None:
         """Closed and deferred vulns must not appear in the returned list."""
         results = store.get_open_vuln_cve_ids()
@@ -258,7 +251,6 @@ class TestGetOpenVulnCveIds:
         assert "CVE-2021-00006" not in cve_ids, "Closed vuln should be excluded"
         assert "CVE-2021-00007" not in cve_ids, "Deferred vuln should be excluded"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_open_vuln_cve_ids()")
     def test_caps_at_200_with_p1_p2_priority(self, store: CMDBStore) -> None:
         """When there are >200 open vulns, result is capped at 200 and P1/P2 are prioritized.
 

@@ -130,12 +130,12 @@ def _deadline_for(priority: str) -> Optional[str]:
     return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
 
 
-def _days_overdue(deadline_iso: str) -> float:
+def _days_overdue(deadline_iso: str) -> int:
     """Return how many days overdue the deadline is (positive = overdue, negative = future).
 
     Handles both timezone-aware ISO strings (e.g. '2024-01-01T00:00:00+00:00')
-    and naive ISO strings (treated as UTC). The return value is a float based
-    on total_seconds() / 86400 so callers can decide their own rounding.
+    and naive ISO strings (treated as UTC). Returns an int (floor of the day delta)
+    so callers get consistent integer comparisons without extra casting.
 
     Used by get_overdue_vulns() to classify and sort overdue/approaching vulns.
     """
@@ -143,12 +143,12 @@ def _days_overdue(deadline_iso: str) -> float:
         dt = datetime.fromisoformat(deadline_iso)
     except ValueError:
         # Malformed deadline -- treat as zero days overdue
-        return 0.0
+        return 0
     if dt.tzinfo is None:
         # Naive datetime -- assume UTC (defensive handling for legacy data)
         dt = dt.replace(tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
-    return (now - dt).total_seconds() / 86400
+    return int((now - dt).total_seconds() / 86400)
 
 
 def apply_criticality_modifier(priority: str, criticality: str) -> str:
@@ -391,7 +391,9 @@ class CMDBStore:
         already exists -- caller should catch and treat as a skip.
         """
         discovered_at = vuln.discovered_at or _now_iso()
-        deadline = _deadline_for(vuln.effective_priority)
+        # Use caller-provided deadline if present; otherwise compute from SLA.
+        # This allows importing vulns with existing deadlines (e.g. scanner output).
+        deadline = vuln.deadline if vuln.deadline else _deadline_for(vuln.effective_priority)
         with self.engine.connect() as conn:
             result = conn.execute(
                 _asset_vulns.insert().values(
@@ -582,32 +584,44 @@ class CMDBStore:
 
         overdue: list[dict] = []
         approaching: list[dict] = []
+        now = datetime.now(timezone.utc)
 
         for row in rows:
-            days_val = _days_overdue(row.deadline)
-            if days_val >= 0:
-                # Past deadline -- overdue
+            try:
+                dt = datetime.fromisoformat(row.deadline)
+            except (ValueError, TypeError):
+                continue
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+
+            delta = now - dt  # positive if past deadline, negative if future
+            delta_seconds = delta.total_seconds()
+
+            if delta_seconds >= 0:
+                # Past deadline -- overdue. Use _days_overdue for consistent int output.
                 overdue.append(
                     {
                         "asset_id": row.asset_id,
                         "hostname": row.hostname,
                         "cve_id": row.cve_id,
                         "effective_priority": row.effective_priority,
-                        "days_overdue": int(days_val),
+                        "days_overdue": _days_overdue(row.deadline),
                         "deadline": row.deadline,
                     }
                 )
-            elif days_val > -approaching_days:
-                # Within approaching window (days_val is negative here, e.g. -3 for 3 days out)
-                overdue_item = {
-                    "asset_id": row.asset_id,
-                    "hostname": row.hostname,
-                    "cve_id": row.cve_id,
-                    "effective_priority": row.effective_priority,
-                    "days_until_due": int(-days_val),
-                    "deadline": row.deadline,
-                }
-                approaching.append(overdue_item)
+            elif delta_seconds > -(approaching_days * 86400):
+                # Within approaching window (deadline is in the future but within the window)
+                days_until = int(-delta_seconds / 86400)
+                approaching.append(
+                    {
+                        "asset_id": row.asset_id,
+                        "hostname": row.hostname,
+                        "cve_id": row.cve_id,
+                        "effective_priority": row.effective_priority,
+                        "days_until_due": days_until,
+                        "deadline": row.deadline,
+                    }
+                )
 
         overdue.sort(key=lambda x: x["days_overdue"], reverse=True)
         approaching.sort(key=lambda x: x["days_until_due"])

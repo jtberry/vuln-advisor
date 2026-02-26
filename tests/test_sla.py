@@ -9,8 +9,6 @@ Covers:
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from cmdb.models import Asset, AssetVulnerability
 from cmdb.store import _SLA_DAYS, CMDBStore
 
@@ -78,7 +76,6 @@ def _make_store_with_overdue_vulns(days_overdue_list: list[int], days_approachin
 
 
 class TestSlaDefaults:
-    @pytest.mark.xfail(reason="Awaiting 03-01 update: _SLA_DAYS changes to {P1:7, P2:30, P3:90, P4:180}")
     def test_sla_defaults_match_context(self) -> None:
         """_SLA_DAYS must match the CONTEXT.md decision after 03-01 updates the constant.
 
@@ -95,7 +92,6 @@ class TestSlaDefaults:
 
 
 class TestDaysOverdue:
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of _days_overdue() helper")
     def test_past_deadline_returns_positive_days(self) -> None:
         """A deadline 10 days ago should return approximately 10 days overdue."""
         from cmdb.store import _days_overdue  # type: ignore[attr-defined]
@@ -105,7 +101,6 @@ class TestDaysOverdue:
         # Allow 1-day tolerance for test timing edge cases
         assert 9 <= result <= 11, f"Expected ~10, got {result}"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of _days_overdue() helper")
     def test_future_deadline_returns_negative_days(self) -> None:
         """A deadline 5 days in the future should return a negative value."""
         from cmdb.store import _days_overdue  # type: ignore[attr-defined]
@@ -114,7 +109,6 @@ class TestDaysOverdue:
         result = _days_overdue(deadline)
         assert result < 0, f"Expected negative value for future deadline, got {result}"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of _days_overdue() helper")
     def test_today_deadline_returns_zero_or_one(self) -> None:
         """A deadline for today (within the current day) should return 0 or 1."""
         from cmdb.store import _days_overdue  # type: ignore[attr-defined]
@@ -123,7 +117,6 @@ class TestDaysOverdue:
         result = _days_overdue(deadline)
         assert result in (0, 1), f"Expected 0 or 1 for today's deadline, got {result}"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of _days_overdue() helper")
     def test_naive_datetime_treated_as_utc(self) -> None:
         """A deadline string without timezone info must not raise and returns a reasonable value."""
         from cmdb.store import _days_overdue  # type: ignore[attr-defined]
@@ -135,7 +128,6 @@ class TestDaysOverdue:
         assert isinstance(result, (int, float)), f"Expected numeric result, got {type(result)}"
         assert result >= 0, f"Expected non-negative for past naive deadline, got {result}"
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of _days_overdue() helper")
     def test_timezone_aware_deadline_handled(self) -> None:
         """A deadline with explicit UTC timezone offset must produce correct result."""
         from cmdb.store import _days_overdue  # type: ignore[attr-defined]
@@ -152,7 +144,6 @@ class TestDaysOverdue:
 
 
 class TestOverdueSort:
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_overdue_items_sorted_most_overdue_first(self) -> None:
         """Overdue list must be ordered by days_overdue descending: [45, 30, 10]."""
         s = _make_store_with_overdue_vulns(days_overdue_list=[30, 10, 45], days_approaching_list=[])
@@ -167,7 +158,6 @@ class TestOverdueSort:
         finally:
             s.close()
 
-    @pytest.mark.xfail(reason="Awaiting 03-01 implementation of get_overdue_vulns()")
     def test_approaching_items_sorted_closest_first(self) -> None:
         """Approaching list must be ordered by deadline ascending (closest due date first): [1, 3, 5]."""
         s = _make_store_with_overdue_vulns(days_overdue_list=[], days_approaching_list=[5, 1, 3])
