@@ -13,6 +13,11 @@ Middleware stack (outermost to innermost):
   2. CORSMiddleware        -- adds CORS headers for allowed browser origins
   3. SlowAPIMiddleware     -- enforces per-route rate limits from api.limiter
 
+@app.middleware decorators (innermost to outermost in execution order):
+  1. log_requests          -- captures wall-clock time for every request
+  2. setup_redirect        -- first-run redirect to /setup when no users exist
+  3. csp_nonce_middleware  -- generates per-request CSP nonce (outermost)
+
 Lifespan handles startup (KEV feed load, cache init, purge task) and
 shutdown (cancel purge task, close DB connection) symmetrically.
 """
@@ -21,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -292,6 +298,58 @@ async def log_requests(request: Request, call_next):
         ms,
         request.client.host if request.client else "unknown",
     )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# CSP nonce middleware
+#
+# Pattern: Interceptor. Wraps every request to inject a per-request nonce
+# into request.state so downstream handlers (Jinja2 templates) can access
+# it, then stamps the CSP header on the response.
+#
+# Why Content-Security-Policy-Report-Only (not enforcing):
+#   Report-Only logs violations to the browser console without blocking
+#   anything. This lets us verify all nonce placements are correct before
+#   enabling enforcement. A single missing nonce would silently break a
+#   script in enforce mode; report-only surfaces it safely.
+#
+# Why secrets.token_urlsafe(16):
+#   128 bits of CSPRNG-backed entropy, base64url encoded. OWASP recommends
+#   >= 128 bits for CSP nonces. token_urlsafe is safe for embedding in HTML
+#   attributes without additional escaping.
+#
+# Registration order: @app.middleware decorators are wrapped in reverse --
+#   last registered = outermost (first to see the request). This middleware
+#   is registered AFTER setup_redirect and log_requests, making it the
+#   outermost decorator wrapper and ensuring the nonce is always set before
+#   any other handler runs.
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def csp_nonce_middleware(request: Request, call_next):
+    """Generate a per-request CSP nonce, attach to request.state, stamp response header.
+
+    The nonce is stored on request.state.csp_nonce so Jinja2 templates can
+    access it via the csp_nonce() global registered in web/routes.py.
+
+    Content-Security-Policy-Report-Only is used (not enforcing) so violations
+    are visible in the browser console without breaking any existing pages.
+    Switch to Content-Security-Policy once the console shows zero violations.
+    """
+    nonce = secrets.token_urlsafe(16)
+    request.state.csp_nonce = nonce
+    response = await call_next(request)
+    csp = (
+        f"default-src 'self'; "
+        f"script-src 'nonce-{nonce}' https://cdn.jsdelivr.net https://unpkg.com; "
+        f"style-src 'nonce-{nonce}' https://cdn.jsdelivr.net; "
+        f"img-src 'self' data:; "
+        f"font-src 'self' https://cdn.jsdelivr.net; "
+        f"connect-src 'self'"
+    )
+    response.headers["Content-Security-Policy-Report-Only"] = csp
     return response
 
 
