@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-26T23:54:26.189Z"
+last_updated: "2026-02-27T00:11:28.073Z"
 progress:
-  total_phases: 6
-  completed_phases: 4
+  total_phases: 5
+  completed_phases: 5
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -22,12 +22,12 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 
 ## Current Position
 
-Phase: 5 of 6 (Test Coverage) -- IN PROGRESS
-Plan: 1 of 2 in current phase -- COMPLETE
-Status: Phase 5 Plan 01 complete
-Last activity: 2026-02-26 - Plan 05-01 complete (conftest.py fixtures, 24 ingest parser tests, CSV injection fix _sanitize_csv_cell() CWE-1236)
+Phase: 5 of 6 (Test Coverage) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 5 Plan 02 complete -- Phase 5 DONE
+Last activity: 2026-02-26 - Plan 05-02 complete (auth redirect integration tests, API route integration tests, coverage scope update, 171 tests passing 100% coverage)
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [█████████░] 92%
 | Phase 03-dashboard-charts P02 | 22 | 2 tasks | 4 files |
 | Phase 04-ui-polish P01 | 2 | 2 tasks | 8 files |
 | Phase 05-test-coverage P01 | 6 | 2 tasks | 4 files |
+| Phase 05-test-coverage P02 | 13 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ Recent decisions affecting current work:
 - [04-02]: event.stopPropagation() on inline <a> tags inside clickable <tr> prevents row handler from firing when link is clicked directly
 - [Phase 05-01]: Named SQLite URIs (file:name?mode=memory&cache=shared&uri=true) over plain :memory: for thread-safe in-memory test isolation in TestClient
 - [Phase 05-01]: Tab-prefix sanitization (OWASP CWE-1236) in _sanitize_csv_cell() -- universal across Excel, LibreOffice, Google Sheets
+- [Phase 05-02]: base_url='http://localhost' on TestClient: required to satisfy TrustedHostMiddleware which rejects default 'testserver' host with 400
+- [Phase 05-02]: Omit core.formatter from coverage scope: adding it drops total to 66% (only sanitizer tested); cmdb.ingest is the meaningful new coverage target at 100%
 
 ### Pending Todos
 
