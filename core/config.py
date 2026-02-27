@@ -104,6 +104,20 @@ class Settings(BaseSettings):
     self_registration_enabled: bool = True
 
     # ------------------------------------------------------------------
+    # Deployment
+    # ------------------------------------------------------------------
+
+    # Database URL for SQLAlchemy. Empty string means use SQLite defaults
+    # in each store (CMDBStore, UserStore). Set to a PostgreSQL URL when
+    # running under Docker with the postgres service.
+    # Example: postgresql://vulnadvisor:changeme@postgres:5432/vulnadvisor
+    database_url: str = ""
+    # Domain used by TrustedHostMiddleware. Behind Caddy the Host header
+    # will be the real public domain -- this field adds it to the allowlist.
+    # Default "localhost" preserves standalone/dev behaviour.
+    domain: str = "localhost"
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
 

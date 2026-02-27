@@ -142,10 +142,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.cache = CVECache()
     logger.info("Cache initialized")
     app.state.kev_set = _load_kev(app.state.cache)
-    app.state.cmdb = CMDBStore()
+    # Pass database_url to stores when configured; fall back to SQLite defaults
+    # when DATABASE_URL is unset (standalone / dev mode preserves existing behaviour).
+    _db_url = get_settings().database_url
+    if _db_url:
+        app.state.cmdb = CMDBStore(db_url=_db_url)
+    else:
+        app.state.cmdb = CMDBStore()
     logger.info("CMDB initialized")
     # Auth store and OAuth registry
-    app.state.user_store = UserStore()
+    if _db_url:
+        app.state.user_store = UserStore(db_url=_db_url)
+    else:
+        app.state.user_store = UserStore()
     app.state.setup_required = not app.state.user_store.has_users()
     app.state.oauth = oauth_client
     logger.info(
@@ -188,14 +197,29 @@ app = FastAPI(
 # request to encounter them: TrustedHost -> CORS -> SlowAPI.
 # ---------------------------------------------------------------------------
 
+_settings = get_settings()
+
+# Build allowed_hosts dynamically so Caddy's forwarded Host header is accepted
+# when a real domain is configured. Without this, TrustedHostMiddleware returns
+# 400 for every request behind the reverse proxy.
+_allowed_hosts = ["localhost", "127.0.0.1", "*.localhost"]
+if _settings.domain and _settings.domain not in ("localhost",):
+    _allowed_hosts.append(_settings.domain)
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.localhost"],
+    allowed_hosts=_allowed_hosts,
 )
+
+# Build allowed CORS origins dynamically -- include the HTTPS origin for the
+# configured domain when it is not localhost.
+_cors_origins = ["http://localhost", "http://localhost:3000", "http://127.0.0.1"]
+if _settings.domain and _settings.domain not in ("localhost", "127.0.0.1"):
+    _cors_origins.append(f"https://{_settings.domain}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:3000", "http://127.0.0.1"],
+    allow_origins=_cors_origins,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     max_age=3600,
