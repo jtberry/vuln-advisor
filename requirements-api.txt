@@ -3,8 +3,10 @@ pydantic-settings>=2.0.0
 uvicorn[standard]==0.34.0
 slowapi==0.1.9
 sqlalchemy>=2.0.0,<3.0.0
+# GHSA-wp53-j4wj-2cfg fix requires >=0.0.22; highest available on mirror is 0.0.20; accepted risk -- see docs/security.md
 python-multipart>=0.0.9
 jinja2>=3.1.0
+# python-jose pulls ecdsa; GHSA-wj6h-64fc-37mp (non-constant-time ECDSA); app uses HS256 only -- not ECDSA; accepted transitive risk
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.1
 authlib>=1.3.0

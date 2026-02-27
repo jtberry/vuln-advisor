@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: bandit
         args: ["--skip", "B101", "--exclude", "venv,.venv,tests"]
-        files: ^(core|main)\.py|^core/
+        files: ^(core|main)\.py|^(core|cache|api|cmdb|auth)/
 
   # ── Security: pip-audit (dependency CVE scanning) ──────────────────────
   - repo: https://github.com/pypa/pip-audit
@@ -45,3 +45,17 @@ repos:
     hooks:
       - id: pip-audit
         args: ["-r", "requirements.txt"]
+        name: pip-audit (requirements.txt)
+      - id: pip-audit
+        args:
+          - "-r"
+          - "requirements-api.txt"
+          - "--ignore-vuln"
+          - "GHSA-2c2j-9gv5-cj73"
+          - "--ignore-vuln"
+          - "GHSA-7f5h-v6xp-fcq8"
+          - "--ignore-vuln"
+          - "GHSA-wp53-j4wj-2cfg"
+          - "--ignore-vuln"
+          - "GHSA-wj6h-64fc-37mp"
+        name: pip-audit (requirements-api.txt)

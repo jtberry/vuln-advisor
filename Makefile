@@ -43,8 +43,17 @@ format: ## Auto-fix formatting (black + isort)
 	isort .
 
 security: ## Run security checks (bandit + pip-audit + semgrep)
-	bandit -r core/ cache/ api/ cmdb/ -q
+	bandit -r core/ cache/ api/ cmdb/ auth/ -q
 	pip-audit -r requirements.txt
+	pip-audit -r requirements-api.txt \
+		--ignore-vuln GHSA-2c2j-9gv5-cj73 \
+		--ignore-vuln GHSA-7f5h-v6xp-fcq8 \
+		--ignore-vuln GHSA-wp53-j4wj-2cfg \
+		--ignore-vuln GHSA-wj6h-64fc-37mp
+	pip-audit -r requirements-dev.txt \
+		--ignore-vuln GHSA-7gcm-g887-7qv7 \
+		--ignore-vuln GHSA-w853-jp5j-5j7f \
+		--ignore-vuln GHSA-qmgc-5h2g-mvrw
 	semgrep scan --config "p/python" --config "p/fastapi" --error --quiet .
 
 smoke: ## Verify all modules import cleanly
