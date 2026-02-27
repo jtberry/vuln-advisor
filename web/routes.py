@@ -67,7 +67,7 @@ from cmdb.store import CMDBStore, apply_criticality_modifier
 from core.models import CVE_PATTERN
 from core.pipeline import process_cve, process_cves
 
-logger = logging.getLogger("vulnadvisor.web")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
