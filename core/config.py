@@ -32,12 +32,14 @@ auth/, cmdb/, or cache/.
 
 import logging
 import secrets
+from datetime import datetime, timezone
 from functools import lru_cache
+from typing import Any
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-logger = logging.getLogger("vulnadvisor.config")
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -164,3 +166,15 @@ def get_settings() -> Settings:
     to inject different environment variables.
     """
     return Settings()
+
+
+def now_iso() -> str:
+    """UTC ISO-8601 timestamp for database records."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def set_wal_mode(dbapi_conn: Any, connection_record: Any) -> None:
+    """SQLAlchemy event listener to enable WAL journal mode on SQLite connections."""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.close()

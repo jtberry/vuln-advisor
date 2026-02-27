@@ -10,5 +10,16 @@ venv/
 cache/*.db
 *.db
 
+# SQLite WAL/SHM files
+*.db-shm
+*.db-wal
+
+# Coverage artifacts
+.coverage
+htmlcov/
+
+# Backup files
+*.bak
+
 # Planning docs — local only
 .planning/
