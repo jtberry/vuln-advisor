@@ -63,6 +63,7 @@ python main.py CVE-2021-44228
 
 ## Documentation
 
+- **Getting started (local dev, Docker, production)** - [docs/getting-started.md](docs/getting-started.md)
 - **CLI usage, flags, and troubleshooting** - [docs/CLI.md](docs/CLI.md)
 - **REST API reference** - [api/README.md](api/README.md)
 - **Architecture and design** - [docs/architecture.md](docs/architecture.md)
@@ -78,9 +79,9 @@ python main.py CVE-2021-44228
 - [x] Web UI with Bootstrap dark theme (login, dashboard, asset management, CVE research)
 - [x] Authentication (local accounts, OAuth with GitHub/Google, API keys, session management)
 - [x] Asset tracking and vulnerability ingest (CSV, Trivy, Grype, Nessus)
-- [ ] Dashboard charts and risk visualization
-- [ ] Remediation status workflow UI (open -> in review -> remediated -> closed)
-- [ ] Containerization (Docker, docker-compose, reverse proxy)
+- [x] Dashboard charts and risk visualization
+- [x] Remediation status workflow UI (open -> in review -> remediated -> closed)
+- [x] Containerization (Docker, docker-compose, reverse proxy)
 - [ ] Jira / ServiceNow ticket creation
 - [ ] Team workspaces and shared reporting
 
