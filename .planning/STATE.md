@@ -8,7 +8,7 @@ progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Phase: 7 of 9 (Code Quality) -- IN PROGRESS
-Plan: 1 of 3 in current phase -- 07-01 complete
-Status: Foundation cleanup done (gitignore, shared utilities, logger standardization)
-Last activity: 2026-02-27 - Completed 07-01 foundation cleanup
+Plan: 2 of 3 in current phase -- 07-02 complete
+Status: Store layer cleanup done (cmdb/ and auth/ deduplication, logger standardization)
+Last activity: 2026-02-27 - Completed 07-02 store layer cleanup
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [███████░░░] 73%
 | Phase 06-containerization P02 | 5 | 2 tasks | 4 files |
 | Phase 06-containerization P03 | 2 | 1 task | 1 file |
 | Phase 07 P01 | 3 | 2 tasks | 4 files |
+| Phase 07 P02 | 5 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -135,6 +136,9 @@ Recent decisions affecting current work:
 - [Phase 06-03]: dev target is exact alias for run-api -- exists for discoverability, run-api kept for backwards compatibility
 - [Phase 07-01]: now_iso() and set_wal_mode() centralized in core/config.py as public API for cmdb/ and auth/ consumption
 - [Phase 07-01]: All core/ and cache/ loggers standardized to logger = logging.getLogger(__name__) for consistent log hierarchy
+- [Phase 07-02]: auth/store.py layer rule updated to allow core/ imports for shared utilities (now_iso, set_wal_mode)
+- [Phase 07-02]: nosemgrep suppression on safe dynamic SQL in update_app_settings -- column names from hardcoded allowlist, not user input
+- [Phase 07-02]: verify_password except block logs at WARNING (not ERROR) -- auth failures are expected operational events
 
 ### Pending Todos
 
@@ -148,5 +152,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 07-code-quality/07-01-PLAN.md (foundation cleanup, shared utilities, logger standardization)
+Stopped at: Completed 07-code-quality/07-02-PLAN.md (store layer cleanup, deduplication, logger standardization)
 Resume file: None

@@ -52,7 +52,7 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 
 - [x] **QUAL-01**: Dead code, unused imports, and orphaned files are removed (#59)
 - [x] **QUAL-02**: Naming conventions, error handling, and logging patterns are consistent across all modules (#59)
-- [ ] **QUAL-03**: Over-abstractions and unnecessary complexity are simplified without losing functionality (#61)
+- [x] **QUAL-03**: Over-abstractions and unnecessary complexity are simplified without losing functionality (#61)
 - [ ] **SEC-01**: Full security audit covering auth flows, input validation, SQL handling, XSS, path traversal, and OWASP top 10 (#60)
 - [ ] **SEC-02**: Dependency audit passes clean (pip-audit, known CVEs) (#60)
 
@@ -133,7 +133,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEPL-01 | Phase 6 | Complete |
 | QUAL-01 | Phase 7 | Complete |
 | QUAL-02 | Phase 7 | Complete |
-| QUAL-03 | Phase 7 | Pending |
+| QUAL-03 | Phase 7 | Complete |
 | SEC-01 | Phase 8 | Pending |
 | SEC-02 | Phase 8 | Pending |
 | DOCS-01 | Phase 9 | Pending |
