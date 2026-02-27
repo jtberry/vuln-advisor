@@ -151,8 +151,13 @@ Plans:
   4. Dependency audit passes clean with no known CVEs
   5. `make security` passes clean
   6. Critical/high findings fixed; medium/low documented as known issues
-**Plans**: TBD (created during /gsd:plan-phase 8)
+**Plans**: 3 total (08-01 through 08-03)
 **Issues**: #60
+
+Plans:
+- [ ] 08-01-PLAN.md -- Fix tooling scope gaps (bandit auth/, pip-audit api), patch dependency CVEs, add Trivy to GHA
+- [ ] 08-02-PLAN.md -- Add CSP header to Caddyfile, create SECURITY.md, audit .gitignore for IP leakage
+- [ ] 08-03-PLAN.md -- Two-pass manual security review, pentest-style findings report
 
 ### Phase 9: Documentation
 **Goal**: A new user can deploy VulnAdvisor in any supported configuration by following a single guide -- no guesswork
@@ -180,5 +185,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 5. Test Coverage | 2/2 | Complete   | 2026-02-27 |
 | 6. Containerization | 3/3 | Complete   | 2026-02-27 |
 | 7. Code Quality | 0/0 | Pending    | - |
-| 8. Security Review | 0/0 | Pending    | - |
+| 8. Security Review | 1/3 | In Progress|  |
 | 9. Documentation | 0/0 | Pending    | - |

@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T15:42:24Z"
+last_updated: "2026-02-27T15:49:28.805Z"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 24
   completed_plans: 24
 ---
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-26)
 
 **Core value:** A solo security analyst can open VulnAdvisor daily, see what needs attention, triage CVEs, track asset risk, and update status - all in one tool with no paid subscriptions.
-**Current focus:** Phase 7 - Code Quality
+**Current focus:** Phase 8 - Security Review
 
 ## Current Position
 
-Phase: 7 of 9 (Code Quality) -- COMPLETE
-Plan: 3 of 3 in current phase -- 07-03 complete
-Status: Phase 7 complete - all loggers standardized, make check clean, codebase quality pass done
-Last activity: 2026-02-27 - Completed 07-03 application layer cleanup
+Phase: 8 of 9 (Security Review) -- IN PROGRESS
+Plan: 2 of 3 in current phase -- 08-02 complete
+Status: Phase 8 Plan 2 complete - CSP header added, SECURITY.md created, .gitignore audited
+Last activity: 2026-02-27 - Completed 08-02 security headers and disclosure policy
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 85%
 
 ## Performance Metrics
 
@@ -142,6 +142,9 @@ Recent decisions affecting current work:
 - [Phase 07-02]: auth/store.py layer rule updated to allow core/ imports for shared utilities (now_iso, set_wal_mode)
 - [Phase 07-02]: nosemgrep suppression on safe dynamic SQL in update_app_settings -- column names from hardcoded allowlist, not user input
 - [Phase 07-02]: verify_password except block logs at WARNING (not ERROR) -- auth failures are expected operational events
+- [Phase 08-02]: unsafe-inline in CSP script-src required for tojson data island and inline session expiry script; nonce-based CSP upgrade tracked as tech debt
+- [Phase 08-02]: unpkg.com added to CSP script-src -- htmx loads from unpkg.com, not cdn.jsdelivr.net
+- [Phase 08-02]: .planning/ tracked in git contains strategic planning artifacts; user decision required before public release (leave, clean history, or remove from tracking)
 
 ### Pending Todos
 
@@ -155,5 +158,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 07-code-quality/07-03-PLAN.md (application layer cleanup, make check clean, Phase 7 complete)
+Stopped at: Completed 08-security-review/08-02-PLAN.md (CSP header, SECURITY.md, .gitignore audit)
 Resume file: None
