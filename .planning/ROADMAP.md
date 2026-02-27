@@ -18,6 +18,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: UI Polish** - Make the tool feel complete and usable as a daily landing page (completed 2026-02-26)
 - [x] **Phase 5: Test Coverage** - Formalize test coverage across all routes, stores, auth, and ingest (completed 2026-02-27)
 - [x] **Phase 6: Containerization** - Dockerfile, docker-compose, and reverse proxy for deployment (completed 2026-02-27)
+- [ ] **Phase 7: Code Quality** - Repo cleanup, dead code removal, consistency pass, and KISS simplification review
+- [ ] **Phase 8: Security Review** - Full codebase security audit covering auth, input validation, SQL, XSS, dependencies
+- [ ] **Phase 9: Documentation** - Makefile accuracy pass, user-friendly installation guide, Docker Postgres local setup docs
 
 ## Phase Details
 
@@ -120,10 +123,53 @@ Plans:
 - [ ] 06-02-PLAN.md -- Health endpoint enhancement, Makefile docker targets, and health integration tests
 - [ ] 06-03-PLAN.md -- Gap closure: strong password generator in make setup, add make dev target
 
+### Phase 7: Code Quality
+**Goal**: The codebase is clean, consistent, and free of unnecessary complexity -- ready for external contributors and security review
+**Depends on**: Phase 6
+**Requirements**: QUAL-01, QUAL-02, QUAL-03
+**Success Criteria** (what must be TRUE):
+  1. No dead code, unused imports, or orphaned files remain
+  2. Naming conventions, error handling, and logging patterns are consistent across all modules
+  3. No over-abstractions or single-use helpers -- complexity is minimal for current functionality
+  4. `make check` passes and all tests pass at 100% coverage after cleanup
+**Plans**: 3 total (07-01 through 07-03)
+**Issues**: #59, #61
+
+Plans:
+- [ ] 07-01-PLAN.md -- Foundation cleanup: .gitignore, shared utility extraction, core/ and cache/ consistency pass
+- [ ] 07-02-PLAN.md -- Store layer cleanup: cmdb/ and auth/ deduplication, loggers, semgrep suppression
+- [ ] 07-03-PLAN.md -- Application layer cleanup: api/, web/, main.py consistency pass and final make check
+
+### Phase 8: Security Review
+**Goal**: All code has been audited for security vulnerabilities; critical/high findings are fixed before v1.0 tag
+**Depends on**: Phase 7
+**Requirements**: SEC-01, SEC-02
+**Success Criteria** (what must be TRUE):
+  1. Auth flows (JWT, bcrypt, API keys, OAuth) reviewed and confirmed secure
+  2. All user input validated before use in SQL, URLs, file paths, and templates
+  3. No XSS vectors in Jinja2 templates (auto-escaping, no unsafe |safe usage)
+  4. Dependency audit passes clean with no known CVEs
+  5. `make security` passes clean
+  6. Critical/high findings fixed; medium/low documented as known issues
+**Plans**: TBD (created during /gsd:plan-phase 8)
+**Issues**: #60
+
+### Phase 9: Documentation
+**Goal**: A new user can deploy VulnAdvisor in any supported configuration by following a single guide -- no guesswork
+**Depends on**: Phase 7 (needs accurate Makefile before documenting it)
+**Requirements**: DOCS-01, DOCS-02, DOCS-03
+**Success Criteria** (what must be TRUE):
+  1. `make help` output is accurate, complete, and matches actual target behavior
+  2. Installation guide covers local dev, Docker SQLite, Docker Postgres, and production deployment
+  3. Docker + PostgreSQL local setup is documented as free with no paid services required
+  4. Guide is linked from main README.md and tested from a clean clone
+**Plans**: TBD (created during /gsd:plan-phase 9)
+**Issues**: #56, #57, #58
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -133,3 +179,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. UI Polish | 2/2 | Complete   | 2026-02-26 |
 | 5. Test Coverage | 2/2 | Complete   | 2026-02-27 |
 | 6. Containerization | 3/3 | Complete   | 2026-02-27 |
+| 7. Code Quality | 0/0 | Pending    | - |
+| 8. Security Review | 0/0 | Pending    | - |
+| 9. Documentation | 0/0 | Pending    | - |

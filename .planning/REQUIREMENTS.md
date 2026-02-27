@@ -48,6 +48,20 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 
 - [x] **DEPL-01**: Application runs via docker-compose with Dockerfile, reverse proxy (Caddy), and TLS
 
+### Code Quality & Security
+
+- [x] **QUAL-01**: Dead code, unused imports, and orphaned files are removed (#59)
+- [x] **QUAL-02**: Naming conventions, error handling, and logging patterns are consistent across all modules (#59)
+- [ ] **QUAL-03**: Over-abstractions and unnecessary complexity are simplified without losing functionality (#61)
+- [ ] **SEC-01**: Full security audit covering auth flows, input validation, SQL handling, XSS, path traversal, and OWASP top 10 (#60)
+- [ ] **SEC-02**: Dependency audit passes clean (pip-audit, known CVEs) (#60)
+
+### Documentation
+
+- [ ] **DOCS-01**: Makefile targets and help text are accurate and complete after all walk-phase changes (#56)
+- [ ] **DOCS-02**: User-friendly installation guide covers all deployment options (local dev, Docker SQLite, Docker Postgres, production) (#57)
+- [ ] **DOCS-03**: Local Docker + PostgreSQL setup documented (free, no paid services) (#58)
+
 ## v2 Requirements
 
 Deferred to future milestones. Tracked but not in current roadmap.
@@ -117,10 +131,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UIPL-03 | Phase 4 | Complete |
 | DEBT-04 | Phase 5 | Complete |
 | DEPL-01 | Phase 6 | Complete |
+| QUAL-01 | Phase 7 | Complete |
+| QUAL-02 | Phase 7 | Complete |
+| QUAL-03 | Phase 7 | Pending |
+| SEC-01 | Phase 8 | Pending |
+| SEC-02 | Phase 8 | Pending |
+| DOCS-01 | Phase 9 | Pending |
+| DOCS-02 | Phase 9 | Pending |
+| DOCS-03 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 23 total
-- Mapped to phases: 23
+- v1 requirements: 31 total
+- Mapped to phases: 31
 - Unmapped: 0
 
 ---
