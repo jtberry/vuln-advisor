@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Dashboard & Charts** - Surface risk data visually and connect status workflow to the UI (completed 2026-02-26)
 - [x] **Phase 4: UI Polish** - Make the tool feel complete and usable as a daily landing page (completed 2026-02-26)
 - [x] **Phase 5: Test Coverage** - Formalize test coverage across all routes, stores, auth, and ingest (completed 2026-02-27)
-- [ ] **Phase 6: Containerization** - Dockerfile, docker-compose, and reverse proxy for deployment
+- [x] **Phase 6: Containerization** - Dockerfile, docker-compose, and reverse proxy for deployment (completed 2026-02-27)
 
 ## Phase Details
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Dashboard & Charts | 4/4 | Complete   | 2026-02-26 |
 | 4. UI Polish | 2/2 | Complete   | 2026-02-26 |
 | 5. Test Coverage | 2/2 | Complete   | 2026-02-27 |
-| 6. Containerization | 1/2 | In Progress|  |
+| 6. Containerization | 2/2 | Complete   | 2026-02-27 |

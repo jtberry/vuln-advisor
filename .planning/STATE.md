@@ -7,8 +7,8 @@ last_updated: "2026-02-27T00:57:00Z"
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 19
-  completed_plans: 19
+  total_plans: 20
+  completed_plans: 20
 ---
 
 # Project State
@@ -22,10 +22,10 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 
 ## Current Position
 
-Phase: 6 of 6 (Containerization) -- IN PROGRESS
-Plan: 1 of 1 in current phase -- COMPLETE
-Status: Phase 6 Plan 01 complete -- Docker infrastructure complete
-Last activity: 2026-02-27 - Plan 06-01 complete (Dockerfile, docker-compose.yml, Caddyfile, .dockerignore, .env.example, Settings.database_url + domain, dynamic middleware wiring)
+Phase: 6 of 6 (Containerization) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 6 Plan 02 complete -- health endpoint DB check, Makefile docker targets, DEPL-01 tests
+Last activity: 2026-02-27 - Plan 06-02 complete (HealthResponse components field, DB connectivity check via SELECT 1, Makefile setup/docker-up/down/logs targets, tests/test_health.py)
 
 Progress: [██████████] 100%
 
@@ -56,6 +56,7 @@ Progress: [██████████] 100%
 | Phase 05-test-coverage P01 | 6 | 2 tasks | 4 files |
 | Phase 05-test-coverage P02 | 13 | 2 tasks | 4 files |
 | Phase 06-containerization P01 | 4 | 2 tasks | 7 files |
+| Phase 06-containerization P02 | 5 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,10 @@ Recent decisions affecting current work:
 - [Phase 06-01]: Caddyfile uses {$DOMAIN} env var -- localhost triggers self-signed cert; real domain triggers Let's Encrypt auto-provisioning
 - [Phase 06-01]: database_url default is empty string -- empty means SQLite defaults in each store; non-empty passed through to SQLAlchemy
 - [Phase 06-01]: TrustedHostMiddleware and CORSMiddleware allowlists built dynamically from Settings.domain -- required for Caddy-forwarded requests
+- [Phase 06-02]: Health route takes request: Request to access app.state.cmdb.engine -- no module globals; clean dependency injection
+- [Phase 06-02]: sqlalchemy text('SELECT 1') for DB check -- compatible with SQLite and PostgreSQL, lightweight, pool-safe via context manager
+- [Phase 06-02]: docker-up/docker-down/docker-logs names chosen over up/down/logs to avoid Makefile target collisions
+- [Phase 06-02]: setup target exits with error if .env already exists -- prevents accidental SECRET_KEY rotation
 
 ### Pending Todos
 
@@ -137,5 +142,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-27
-Stopped at: Completed 06-containerization/06-01-PLAN.md (Dockerfile, docker-compose.yml, Caddyfile, database_url + domain wiring)
+Stopped at: Completed 06-containerization/06-02-PLAN.md (health DB check, Makefile docker targets, DEPL-01 tests)
 Resume file: None
