@@ -23,6 +23,7 @@ Usage:
 """
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -45,6 +46,9 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 
 from cmdb.models import Asset, AssetVulnerability, RemediationRecord
+from core.config import now_iso, set_wal_mode
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_URL = f"sqlite:///{Path(__file__).parent / 'vulnadvisor_cmdb.db'}"
 
@@ -112,10 +116,6 @@ _remediation = Table(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _deadline_for(priority: str) -> Optional[str]:
@@ -280,21 +280,6 @@ def _is_regression(from_status: str, to_status: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# WAL mode
-# ---------------------------------------------------------------------------
-
-
-def _set_wal_mode(dbapi_conn, connection_record) -> None:
-    """Enable WAL journal mode for concurrent read safety.
-
-    WAL (Write-Ahead Logging) allows readers to proceed without blocking
-    during writes. Set per-connection because SQLite PRAGMAs are not
-    inherited by new connections from the pool.
-    """
-    dbapi_conn.execute("PRAGMA journal_mode=WAL")
-
-
-# ---------------------------------------------------------------------------
 # Repository
 # ---------------------------------------------------------------------------
 
@@ -309,7 +294,7 @@ class CMDBStore:
             connect_args["check_same_thread"] = False
         self.engine: Engine = create_engine(db_url, connect_args=connect_args)
         if db_url.startswith("sqlite"):
-            event.listen(self.engine, "connect", _set_wal_mode)
+            event.listen(self.engine, "connect", set_wal_mode)
         metadata.create_all(self.engine)
         with self.engine.connect() as conn:
             _migrate_assets_table(conn)
@@ -333,7 +318,7 @@ class CMDBStore:
                     criticality=asset.criticality,
                     owner=asset.owner,
                     tags=json.dumps(asset.tags),
-                    created_at=_now_iso(),
+                    created_at=now_iso(),
                     os=asset.os,
                     eol_date=asset.eol_date,
                     compliance=json.dumps(asset.compliance),
@@ -390,7 +375,7 @@ class CMDBStore:
         Raises sqlalchemy.exc.IntegrityError if the (asset_id, cve_id) pair
         already exists -- caller should catch and treat as a skip.
         """
-        discovered_at = vuln.discovered_at or _now_iso()
+        discovered_at = vuln.discovered_at or now_iso()
         # Use caller-provided deadline if present; otherwise compute from SLA.
         # This allows importing vulns with existing deadlines (e.g. scanner output).
         deadline = vuln.deadline if vuln.deadline else _deadline_for(vuln.effective_priority)
@@ -447,7 +432,7 @@ class CMDBStore:
         a second DB round-trip inside the transaction.
         """
         regression = _is_regression(from_status, status) if from_status else False
-        now = _now_iso()
+        now = now_iso()
         with self.engine.connect() as conn:
             result = conn.execute(
                 _asset_vulns.update()
@@ -639,10 +624,6 @@ class CMDBStore:
             list of dicts: [{"asset_id", "hostname", "cve_id",
                              "effective_priority", "exposure"}, ...]
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         join_stmt = (
             select(
                 _asset_vulns.c.cve_id,

@@ -22,11 +22,8 @@ import csv
 import io
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+from core.config import now_iso
 
 
 @dataclass
@@ -67,7 +64,7 @@ def parse_csv(content: str) -> list[IngestRecord]:
             IngestRecord(
                 hostname=hostname,
                 cve_id=cve_id,
-                discovered_at=_now_iso(),
+                discovered_at=now_iso(),
                 scanner="csv",
                 raw=dict(row),
             )
@@ -117,7 +114,7 @@ def parse_trivy_json(content: str) -> list[IngestRecord]:
                 IngestRecord(
                     hostname=hostname,
                     cve_id=cve_id,
-                    discovered_at=_now_iso(),
+                    discovered_at=now_iso(),
                     scanner="trivy",
                     raw=vuln,
                 )
@@ -166,7 +163,7 @@ def parse_grype_json(content: str) -> list[IngestRecord]:
             IngestRecord(
                 hostname=hostname,
                 cve_id=cve_id,
-                discovered_at=_now_iso(),
+                discovered_at=now_iso(),
                 scanner="grype",
                 raw=match,
             )
@@ -207,7 +204,7 @@ def parse_nessus_csv(content: str) -> list[IngestRecord]:
                 IngestRecord(
                     hostname=hostname,
                     cve_id=cve_id,
-                    discovered_at=_now_iso(),
+                    discovered_at=now_iso(),
                     scanner="nessus",
                     raw=dict(row),
                 )
