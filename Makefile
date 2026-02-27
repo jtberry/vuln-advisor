@@ -19,7 +19,7 @@ venv: ## Create virtual environment
 	python3 -m venv $(VENV)
 	@echo "  Activate with: source $(VENV)/bin/activate"
 
-
+install: ## Install core dependencies
 	pip install -r requirements.txt
 
 install-dev: ## Install all deps and set up pre-commit hooks
