@@ -1,5 +1,9 @@
 # VulnAdvisor
 
+[![CI](https://github.com/jtberry/vuln-advisor/actions/workflows/ci.yml/badge.svg)](https://github.com/jtberry/vuln-advisor/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
 > Plain-language CVE triage and remediation guidance, built for security teams who need answers, not more data.
 
 No API keys. No paywalls. All data from free, authoritative public sources.
@@ -70,6 +74,31 @@ python main.py CVE-2021-44228
 
 ---
 
+## Configuration
+
+Copy `.env.example` to `.env` and configure. The CLI requires no configuration at all - environment variables are only needed for the web UI and API server.
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `SECRET_KEY` | Yes (production) | Auto-generated in debug | Signs sessions and API keys. Min 32 chars. |
+| `DEBUG` | No | `false` | Enables auto-generated SECRET_KEY and verbose errors |
+| `DOMAIN` | No | `localhost` | Caddy TLS cert target. Set to your real domain in production. |
+| `DATABASE_URL` | No | SQLite (local files) | PostgreSQL URL when using `--profile with-postgres` |
+| `SECURE_COOKIES` | No | `false` | Set `true` behind HTTPS to require TLS for auth cookies |
+| `NVD_API_KEY` | No | None | Optional. Raises NVD rate limit from 5 to 50 req/30s |
+
+**OAuth providers** (all optional - leave blank to disable):
+
+| Provider | Variables |
+|----------|-----------|
+| GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` |
+| Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` |
+| OIDC (Okta, Azure AD, etc.) | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_DISCOVERY_URL` |
+
+See [.env.example](.env.example) for the full list with inline documentation.
+
+---
+
 ## Roadmap
 
 - [x] Bulk CVE processing from vulnerability scanner exports
@@ -105,6 +134,12 @@ make test
 ```
 
 CI enforces 80% line coverage on `core/enricher.py`. All 6 CI checks (lint, security, semgrep, secret scan, import smoke test, unit tests) must pass before merging.
+
+---
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for reporting instructions.
 
 ---
 
