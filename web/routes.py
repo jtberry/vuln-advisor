@@ -643,6 +643,8 @@ async def asset_create(
     compliance: Optional[list[str]] = Form(default=None),  # noqa: B008
 ) -> HTMLResponse:
     """Handle asset creation form POST. Redirects to the new asset on success."""
+    if redirect := _require_auth(request):
+        return redirect
     compliance_raw: list[str] = compliance or []
     form_data = {
         "hostname": hostname or "",
@@ -1112,6 +1114,8 @@ async def ingest_file_htmx(
     default_criticality: str = Form(default="medium"),
 ) -> HTMLResponse:
     """HTMX: ingest a scanner file and return a counts/errors result fragment."""
+    if redirect := _require_auth(request):
+        return redirect
     if default_exposure not in _VALID_EXPOSURES:
         default_exposure = "internal"
     if default_criticality not in _VALID_CRITICALITIES:
