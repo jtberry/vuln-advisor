@@ -61,7 +61,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-5s %(name)s %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("vulnadvisor.api")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Background purge task
@@ -471,6 +471,7 @@ async def health(request: Request) -> HealthResponse:
         with request.app.state.cmdb.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception:
+        logger.warning("Health check DB probe failed", exc_info=True)
         db_status = "error"
 
     overall = "healthy" if db_status == "ok" else "degraded"
