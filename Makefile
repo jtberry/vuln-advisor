@@ -74,6 +74,35 @@ run-file: ## Triage CVEs from a file  (usage: make run-file FILE=cves.txt)
 run-api: ## Start the API server  (walk phase)
 	uvicorn asgi:app --reload --host 0.0.0.0 --port 8000
 
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+.PHONY: setup docker-up docker-down docker-logs
+
+setup: ## First-time setup: copy .env.example -> .env, generate SECRET_KEY
+	@if [ -f .env ]; then \
+		echo "  .env already exists. Delete it first if you want to reset."; \
+		exit 1; \
+	fi
+	cp .env.example .env
+	@SECRET=$$(python3 -c "import secrets; print(secrets.token_hex(32))"); \
+	sed -i "s|SECRET_KEY=<generate.*>|SECRET_KEY=$$SECRET|" .env
+	@DBPASS=$$(python3 -c "import secrets; print(secrets.token_hex(16))"); \
+	sed -i "s|POSTGRES_PASSWORD=<generate.*>|POSTGRES_PASSWORD=$$DBPASS|" .env
+	@echo ""
+	@echo "  .env created with generated SECRET_KEY and POSTGRES_PASSWORD."
+	@echo "  For production: set DOMAIN to your public hostname."
+	@echo "  For PostgreSQL: set DATABASE_URL and run with --profile with-postgres"
+	@echo ""
+
+docker-up: ## Start Docker services (add --profile with-postgres for PostgreSQL)
+	docker compose up -d
+
+docker-down: ## Stop Docker services
+	docker compose down
+
+docker-logs: ## Tail application logs
+	docker compose logs -f app
+
 # ── Clean ─────────────────────────────────────────────────────────────────────
 
 .PHONY: clean kill-api
