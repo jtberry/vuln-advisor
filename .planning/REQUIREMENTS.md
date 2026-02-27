@@ -46,7 +46,7 @@ Requirements for the Solo Analyst milestone. Each maps to roadmap phases.
 
 ### Deployment
 
-- [ ] **DEPL-01**: Application runs via docker-compose with Dockerfile, reverse proxy (Caddy), and TLS
+- [x] **DEPL-01**: Application runs via docker-compose with Dockerfile, reverse proxy (Caddy), and TLS
 
 ## v2 Requirements
 
@@ -116,7 +116,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UIPL-02 | Phase 4 | Complete |
 | UIPL-03 | Phase 4 | Complete |
 | DEBT-04 | Phase 5 | Complete |
-| DEPL-01 | Phase 6 | Pending |
+| DEPL-01 | Phase 6 | Complete |
 
 **Coverage:**
 - v1 requirements: 23 total

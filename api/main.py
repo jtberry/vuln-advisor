@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi_csrf_protect.exceptions import CsrfProtectError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from api.limiter import limiter
@@ -454,6 +455,27 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 @app.get("/api/v1/health", include_in_schema=True, tags=["Health"])
-async def health() -> HealthResponse:
-    """Return API liveness and current version."""
-    return HealthResponse(version="0.2.0")
+async def health(request: Request) -> HealthResponse:
+    """Return API liveness, version, and component health.
+
+    Database check: attempts a lightweight connection test via the CMDB
+    engine. Catches all exceptions and reports 'error' rather than raising
+    to the caller (per architecture rule: external checks return None or
+    empty on failure, never raise).
+
+    Does NOT check external APIs (NVD, EPSS, CISA KEV) -- their downtime
+    is not app unhealthiness.
+    """
+    db_status = "ok"
+    try:
+        with request.app.state.cmdb.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "error"
+
+    overall = "healthy" if db_status == "ok" else "degraded"
+    return HealthResponse(
+        status=overall,
+        version="0.2.0",
+        components={"database": db_status, "app": "ok"},
+    )

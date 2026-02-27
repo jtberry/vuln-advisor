@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T00:11:28.073Z"
+last_updated: "2026-02-27T00:57:00Z"
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 5
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 19
+  completed_plans: 19
 ---
 
 # Project State
@@ -18,14 +18,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-02-26)
 
 **Core value:** A solo security analyst can open VulnAdvisor daily, see what needs attention, triage CVEs, track asset risk, and update status - all in one tool with no paid subscriptions.
-**Current focus:** Phase 5 - Test Coverage
+**Current focus:** Phase 6 - Containerization
 
 ## Current Position
 
-Phase: 5 of 6 (Test Coverage) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
-Status: Phase 5 Plan 02 complete -- Phase 5 DONE
-Last activity: 2026-02-26 - Plan 05-02 complete (auth redirect integration tests, API route integration tests, coverage scope update, 171 tests passing 100% coverage)
+Phase: 6 of 6 (Containerization) -- IN PROGRESS
+Plan: 1 of 1 in current phase -- COMPLETE
+Status: Phase 6 Plan 01 complete -- Docker infrastructure complete
+Last activity: 2026-02-27 - Plan 06-01 complete (Dockerfile, docker-compose.yml, Caddyfile, .dockerignore, .env.example, Settings.database_url + domain, dynamic middleware wiring)
 
 Progress: [██████████] 100%
 
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 04-ui-polish P01 | 2 | 2 tasks | 8 files |
 | Phase 05-test-coverage P01 | 6 | 2 tasks | 4 files |
 | Phase 05-test-coverage P02 | 13 | 2 tasks | 4 files |
+| Phase 06-containerization P01 | 4 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,12 @@ Recent decisions affecting current work:
 - [Phase 05-01]: Tab-prefix sanitization (OWASP CWE-1236) in _sanitize_csv_cell() -- universal across Excel, LibreOffice, Google Sheets
 - [Phase 05-02]: base_url='http://localhost' on TestClient: required to satisfy TrustedHostMiddleware which rejects default 'testserver' host with 400
 - [Phase 05-02]: Omit core.formatter from coverage scope: adding it drops total to 66% (only sanitizer tested); cmdb.ingest is the meaningful new coverage target at 100%
+- [Phase 06-01]: Multi-stage Docker build -- builder/runtime split reduces image size and attack surface; no pip or build tools in runtime layer
+- [Phase 06-01]: Non-root user (vulnadvisor) in Dockerfile -- principle of least privilege if process is compromised
+- [Phase 06-01]: postgres opt-in via Compose profiles: [with-postgres] -- default docker compose up uses SQLite; no mandatory PostgreSQL dependency
+- [Phase 06-01]: Caddyfile uses {$DOMAIN} env var -- localhost triggers self-signed cert; real domain triggers Let's Encrypt auto-provisioning
+- [Phase 06-01]: database_url default is empty string -- empty means SQLite defaults in each store; non-empty passed through to SQLAlchemy
+- [Phase 06-01]: TrustedHostMiddleware and CORSMiddleware allowlists built dynamically from Settings.domain -- required for Caddy-forwarded requests
 
 ### Pending Todos
 
@@ -129,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-26
-Stopped at: Completed 04-ui-polish/04-02-PLAN.md (getting-started view, section reorder, all-clear widgets, clickable rows, empty state upgrades)
+Last session: 2026-02-27
+Stopped at: Completed 06-containerization/06-01-PLAN.md (Dockerfile, docker-compose.yml, Caddyfile, database_url + domain wiring)
 Resume file: None

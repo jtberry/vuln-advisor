@@ -185,12 +185,18 @@ class ErrorResponse(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Response for GET /api/v1/health."""
+    """Response for GET /api/v1/health.
+
+    Components dict reports sub-system status for monitoring and Docker
+    HEALTHCHECK. Each component is 'ok' or 'error'. Top-level status
+    is 'healthy' when all components are 'ok', 'degraded' otherwise.
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    status: str = "ok"
+    status: str = "healthy"
     version: str
+    components: dict = Field(default_factory=dict)  # dict[str, str]
 
 
 # ---------------------------------------------------------------------------
