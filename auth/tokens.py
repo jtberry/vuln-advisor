@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from auth.models import User
     from auth.store import UserStore
 
-logger = logging.getLogger("vulnadvisor.auth")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config -- read once at module load via the lru_cache singleton [M6]
@@ -79,7 +79,8 @@ def verify_password(plain: str, hashed: str) -> bool:
     """Return True if the plaintext password matches the bcrypt hash."""
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Password verification error: %s", exc)
         return False
 
 

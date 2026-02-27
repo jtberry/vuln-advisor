@@ -15,7 +15,8 @@ Security:
 
 DB path: auth/vulnadvisor_auth.db (sibling to cmdb/vulnadvisor_cmdb.db).
 
-Layer rule: no imports from api/, web/, core/, cmdb/, or cache/.
+Layer rule: no imports from api/, web/, cmdb/, or cache/. Import from core/
+is allowed for shared utilities (now_iso, set_wal_mode).
 
 Schema migration notes:
   last_login TEXT column: added via ALTER TABLE ADD COLUMN so existing DBs
@@ -27,13 +28,16 @@ Schema migration notes:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import logging
 from pathlib import Path
 
 from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine, event, text
 from sqlalchemy.engine import Engine
 
 from auth.models import ApiKey, User
+from core.config import now_iso, set_wal_mode
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_DB_URL = f"sqlite:///{Path(__file__).parent / 'vulnadvisor_auth.db'}"
 
@@ -76,30 +80,6 @@ _api_keys = Table(
 
 
 # ---------------------------------------------------------------------------
-# WAL mode
-# ---------------------------------------------------------------------------
-
-
-def _set_wal_mode(dbapi_conn, connection_record) -> None:
-    """Enable WAL journal mode for concurrent read safety.
-
-    WAL (Write-Ahead Logging) allows readers to proceed without blocking
-    during writes. Set per-connection because SQLite PRAGMAs are not
-    inherited by new connections from the pool.
-    """
-    dbapi_conn.execute("PRAGMA journal_mode=WAL")
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-# ---------------------------------------------------------------------------
 # Repository
 # ---------------------------------------------------------------------------
 
@@ -135,7 +115,7 @@ class UserStore:
             connect_args["check_same_thread"] = False
         self.engine: Engine = create_engine(db_url, connect_args=connect_args)
         if db_url.startswith("sqlite"):
-            event.listen(self.engine, "connect", _set_wal_mode)
+            event.listen(self.engine, "connect", set_wal_mode)
         _metadata.create_all(self.engine)
         self._ensure_app_settings()
         self._ensure_last_login_column()
@@ -232,7 +212,7 @@ class UserStore:
                     oauth_provider=user.oauth_provider,
                     oauth_subject=user.oauth_subject,
                     user_preferences=user.user_preferences,
-                    created_at=_now_iso(),
+                    created_at=now_iso(),
                     is_active=1 if user.is_active else 0,
                 )
             )
@@ -326,7 +306,7 @@ class UserStore:
         so the admin user management table shows accurate activity data.
         """
         with self.engine.connect() as conn:
-            conn.execute(_users.update().where(_users.c.id == user_id).values(last_login=_now_iso()))
+            conn.execute(_users.update().where(_users.c.id == user_id).values(last_login=now_iso()))
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -409,7 +389,12 @@ class UserStore:
             else:
                 params[k] = int(v)  # SLA days must be positive integers
         with self.engine.connect() as conn:
-            conn.execute(text(f"UPDATE app_settings SET {set_clause} WHERE id = 1"), params)  # noqa: S608
+            # Column names are from a hardcoded allowlist (_APP_SETTINGS_KEYS), not user input
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            conn.execute(
+                text(f"UPDATE app_settings SET {set_clause} WHERE id = 1"),  # noqa: S608
+                params,
+            )
             conn.commit()
 
     # ------------------------------------------------------------------
@@ -435,7 +420,7 @@ class UserStore:
                     name=api_key.name,
                     key_hash=api_key.key_hash,
                     key_prefix=api_key.key_prefix,
-                    created_at=_now_iso(),
+                    created_at=now_iso(),
                     is_active=1,
                 )
             )
@@ -453,7 +438,7 @@ class UserStore:
     def update_api_key_last_used(self, key_id: int) -> None:
         """Stamp last_used on a key after each successful API authentication."""
         with self.engine.connect() as conn:
-            conn.execute(_api_keys.update().where(_api_keys.c.id == key_id).values(last_used=_now_iso()))
+            conn.execute(_api_keys.update().where(_api_keys.c.id == key_id).values(last_used=now_iso()))
             conn.commit()
 
     def revoke_api_key(self, key_id: int, user_id: int) -> bool:

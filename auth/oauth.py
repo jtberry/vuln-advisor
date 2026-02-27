@@ -34,7 +34,7 @@ from authlib.integrations.starlette_client import OAuth
 
 from core.config import get_settings
 
-logger = logging.getLogger("vulnadvisor.auth.oauth")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Authlib OAuth registry
