@@ -121,3 +121,24 @@ class TestSafeNextValidation:
         next_path = next_values[0]
         assert next_path.startswith("/"), f"next= must be a relative path, got: {next_path!r}"
         assert not next_path.startswith("//"), f"next= must not be protocol-relative, got: {next_path!r}"
+
+
+class TestPostRouteAuthEnforcement:
+    """Verify POST routes enforce _require_auth (MC-001, MC-002 from milestone audit)."""
+
+    def test_post_assets_unauthenticated_redirects(self, web_client: tuple[TestClient, str]) -> None:
+        """POST /assets with no auth cookie must 302 to /login."""
+        client, _token = web_client
+        resp = client.post("/assets", data={"hostname": "test-host"})
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["location"]
+
+    def test_post_ingest_unauthenticated_redirects(self, web_client: tuple[TestClient, str]) -> None:
+        """POST /ingest with no auth cookie must 302 to /login."""
+        client, _token = web_client
+        resp = client.post(
+            "/ingest",
+            files={"file": ("scan.csv", b"hostname,ip\nhost1,1.2.3.4", "text/csv")},
+        )
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["location"]
