@@ -113,11 +113,12 @@ Plans:
   2. Reverse proxy (Caddy) handles TLS termination
   3. Environment variables and SECRET_KEY are configured via docker-compose env
   4. Health check endpoint confirms application is running
-**Plans**: 2 total (06-01 through 06-02)
+**Plans**: 3 total (06-01 through 06-03)
 
 Plans:
 - [ ] 06-01-PLAN.md -- Docker infrastructure files and app config (Dockerfile, docker-compose.yml, Caddyfile, Settings updates)
 - [ ] 06-02-PLAN.md -- Health endpoint enhancement, Makefile docker targets, and health integration tests
+- [ ] 06-03-PLAN.md -- Gap closure: strong password generator in make setup, add make dev target
 
 ## Progress
 
@@ -131,4 +132,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 3. Dashboard & Charts | 4/4 | Complete   | 2026-02-26 |
 | 4. UI Polish | 2/2 | Complete   | 2026-02-26 |
 | 5. Test Coverage | 2/2 | Complete   | 2026-02-27 |
-| 6. Containerization | 2/2 | Complete   | 2026-02-27 |
+| 6. Containerization | 3/3 | Complete   | 2026-02-27 |
