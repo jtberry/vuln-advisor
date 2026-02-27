@@ -1,0 +1,34 @@
+# Version control
+.git
+.gitignore
+
+# Python virtual environments
+venv/
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets -- never bake real env files into the image
+.env
+.env.*
+!.env.example
+
+# SQLite cache files created at runtime
+cache/*.db
+cache/*.db-shm
+cache/*.db-wal
+
+# Test and development artefacts
+tests/
+docs/
+.planning/
+*.md
+!README.md
+.coverage
+.pytest_cache/
+
+# Editor and tooling
+.claude/

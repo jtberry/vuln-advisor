@@ -1,0 +1,19 @@
+# VulnAdvisor Caddyfile
+#
+# {$DOMAIN} reads the DOMAIN environment variable at runtime:
+#   DOMAIN=localhost      -> Caddy uses a self-signed cert (tls internal)
+#   DOMAIN=example.com   -> Caddy auto-provisions a Let's Encrypt cert
+#
+# HTTP to HTTPS redirect is automatic and built in to Caddy.
+# No extra redirect block is needed.
+
+{$DOMAIN} {
+    reverse_proxy app:8000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
