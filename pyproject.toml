@@ -41,4 +41,4 @@ skips = ["*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=core.enricher --cov=core.pipeline --cov-report=term-missing --cov-fail-under=80"
+addopts = "--cov=core.enricher --cov=core.pipeline --cov=cmdb.ingest --cov-report=term-missing --cov-fail-under=80"
