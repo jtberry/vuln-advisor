@@ -103,7 +103,6 @@ setup: ## First-time setup: copy .env.example -> .env, generate SECRET_KEY
 	@echo ""
 	@echo "  .env created with generated SECRET_KEY and POSTGRES_PASSWORD."
 	@echo "  For production: set DOMAIN to your public hostname."
-	@echo "  For PostgreSQL: set DATABASE_URL and run with --profile with-postgres"
 	@echo ""
 
 docker-up: ## Start Docker services (add --profile with-postgres for PostgreSQL)

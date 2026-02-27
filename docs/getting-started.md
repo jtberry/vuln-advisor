@@ -1,11 +1,10 @@
 # Getting Started
 
-Deploy VulnAdvisor from a clean clone. Four configurations covered:
+Deploy VulnAdvisor from a clean clone. Three configurations covered:
 
 - [Prerequisites](#prerequisites)
 - [Local Dev (Python + venv)](#local-dev-python--venv)
-- [Docker SQLite](#docker-sqlite)
-- [Docker PostgreSQL](#docker-postgresql)
+- [Docker (SQLite)](#docker-sqlite)
 - [Production (VPS + TLS)](#production-vps--tls)
 - [Troubleshooting](#troubleshooting)
 
@@ -57,9 +56,9 @@ For CLI-only usage (no API server required), see [docs/CLI.md](CLI.md).
 
 ---
 
-## Docker SQLite
+## Docker (SQLite)
 
-Runs the full stack (app + Caddy reverse proxy) with SQLite storage. Easiest option for local testing.
+Runs the full stack (app + Caddy reverse proxy) with SQLite storage.
 
 ```bash
 git clone https://github.com/jtberry/vuln-advisor.git
@@ -77,39 +76,6 @@ make docker-up
 Navigate to https://localhost. The browser will warn about a self-signed certificate -- this is expected and safe to proceed for local use.
 
 First visit redirects to the setup wizard to create your admin account.
-
----
-
-## Docker PostgreSQL
-
-Runs the full stack with PostgreSQL 17. All free, open-source software -- no paid services required.
-
-```bash
-git clone https://github.com/jtberry/vuln-advisor.git
-cd vuln-advisor
-```
-
-```bash
-make setup
-```
-
-`make setup` generates a strong `POSTGRES_PASSWORD` in `.env`. Use that generated value for the `DATABASE_URL` below.
-
-Edit `.env` and set:
-
-```
-DATABASE_URL=postgresql://vulnadvisor:YOUR_GENERATED_PASSWORD@postgres:5432/vulnadvisor
-```
-
-Replace `YOUR_GENERATED_PASSWORD` with the value `make setup` wrote into `POSTGRES_PASSWORD=` in your `.env`.
-
-```bash
-docker compose --profile with-postgres up -d
-```
-
-PostgreSQL includes a healthcheck -- the app waits for the database to be ready before starting.
-
-Navigate to https://localhost. First visit redirects to the setup wizard.
 
 ---
 
@@ -135,9 +101,6 @@ make setup
 # Your public hostname -- Caddy uses this for TLS cert provisioning
 DOMAIN=vuln.example.com
 
-# Use the generated POSTGRES_PASSWORD value here
-DATABASE_URL=postgresql://vulnadvisor:YOUR_GENERATED_PASSWORD@postgres:5432/vulnadvisor
-
 # Required in production
 DEBUG=false
 SECURE_COOKIES=true
@@ -146,12 +109,14 @@ SECURE_COOKIES=true
 **5. Start:**
 
 ```bash
-docker compose --profile with-postgres up -d
+make docker-up
 ```
 
 Caddy provisions the TLS certificate automatically on the first HTTPS request to your domain. No additional configuration required.
 
 Navigate to https://vuln.example.com. First visit redirects to the setup wizard.
+
+> **PostgreSQL support** is planned for a future release. The current deployment uses SQLite, which is appropriate for solo-analyst use. See GitHub issues #45 and #46 for migration tracking.
 
 ---
 
@@ -160,10 +125,6 @@ Navigate to https://vuln.example.com. First visit redirects to the setup wizard.
 ### `docker-compose: command not found`
 
 Compose v1 used `docker-compose` (hyphen). This project uses Compose v2 syntax: `docker compose` (space, no hyphen). Install Docker Desktop or Docker Engine with the Compose plugin.
-
-### Database URL not set -- app uses SQLite even with `--profile with-postgres`
-
-If `DATABASE_URL` is empty in `.env`, the app silently falls back to SQLite. Set `DATABASE_URL` to the full PostgreSQL connection string as shown in the Docker PostgreSQL section above.
 
 ### Browser warns about certificate on `https://localhost`
 
