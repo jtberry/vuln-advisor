@@ -96,9 +96,9 @@ setup: ## First-time setup: copy .env.example -> .env, generate SECRET_KEY
 		exit 1; \
 	fi
 	cp .env.example .env
-	@SECRET=$$(python3 -c "import secrets, string; c = string.ascii_letters + string.digits + '!@#\$$%^&*()-_=+[]{}|;:,.<>?'; print(''.join(secrets.choice(c) for _ in range(64)))"); \
+	@SECRET=$$(python3 -c "import secrets, string; c = string.ascii_letters + string.digits + '!@#\$$%^*()-_=+[]{}:,.<>?'; print(''.join(secrets.choice(c) for _ in range(64)))"); \
 	sed -i "s|^SECRET_KEY=$$|SECRET_KEY=$$SECRET|" .env
-	@DBPASS=$$(python3 -c "import secrets, string; c = string.ascii_letters + string.digits + '!@#\$$%^&*()-_=+[]{}|;:,.<>?'; print(''.join(secrets.choice(c) for _ in range(32)))"); \
+	@DBPASS=$$(python3 -c "import secrets, string; c = string.ascii_letters + string.digits + '!@#\$$%^*()-_=+[]{}:,.<>?'; print(''.join(secrets.choice(c) for _ in range(32)))"); \
 	sed -i "s|^POSTGRES_PASSWORD=$$|POSTGRES_PASSWORD=$$DBPASS|" .env
 	@echo ""
 	@echo "  .env created with generated SECRET_KEY and POSTGRES_PASSWORD."

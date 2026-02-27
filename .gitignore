@@ -21,5 +21,8 @@ htmlcov/
 # Backup files
 *.bak
 
+# MkDocs build output
+site/
+
 # Planning docs — local only
 .planning/
