@@ -148,5 +148,5 @@ Use WSL2 or Docker Desktop for Windows. Native Windows paths and line endings ca
 ## Further Reading
 
 - [CLI usage and flags](CLI.md)
-- [REST API reference](../api/README.md)
+- [REST API reference](api-reference.md)
 - [Architecture and design](architecture.md)
