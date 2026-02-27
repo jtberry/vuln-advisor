@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-02-27T15:49:28.805Z"
+last_updated: "2026-02-27T16:36:41.381Z"
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 7
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 27
+  completed_plans: 26
 ---
 
 # Project State
@@ -23,9 +23,9 @@ See: .planning/PROJECT.md (updated 2026-02-26)
 ## Current Position
 
 Phase: 8 of 9 (Security Review) -- IN PROGRESS
-Plan: 2 of 3 in current phase -- 08-02 complete
-Status: Phase 8 Plan 2 complete - CSP header added, SECURITY.md created, .gitignore audited
-Last activity: 2026-02-27 - Completed 08-02 security headers and disclosure policy
+Plan: 2 of 3 in current phase -- 08-01 and 08-02 complete
+Status: Phase 8 Plans 1 and 2 complete - security tooling expanded, CSP header added, SECURITY.md created
+Last activity: 2026-02-27 - Completed 08-01 security tooling scope expansion (bandit auth/, pip-audit api reqs, Trivy)
 
 Progress: [████████░░] 85%
 
@@ -61,6 +61,7 @@ Progress: [████████░░] 85%
 | Phase 07 P01 | 3 | 2 tasks | 4 files |
 | Phase 07 P03 | 8 | 2 tasks | 4 files |
 | Phase 07 P02 | 5 | 2 tasks | 5 files |
+| Phase 08-security-review P01 | 15 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,9 @@ Recent decisions affecting current work:
 - [Phase 08-02]: unsafe-inline in CSP script-src required for tojson data island and inline session expiry script; nonce-based CSP upgrade tracked as tech debt
 - [Phase 08-02]: unpkg.com added to CSP script-src -- htmx loads from unpkg.com, not cdn.jsdelivr.net
 - [Phase 08-02]: .planning/ tracked in git contains strategic planning artifacts; user decision required before public release (leave, clean history, or remove from tracking)
+- [Phase 08-01]: starlette CVEs accepted risk: fix requires fastapi>=0.116.0 (major upgrade); tracked for future cycle
+- [Phase 08-01]: Trivy exit-code 0 (warn-only): PR blocking via branch protection settings, not YAML
+- [Phase 08-01]: pip-audit --ignore-vuln per GHSA-ID: keeps audit honest; 7 CVEs ignored not skipped
 
 ### Pending Todos
 
