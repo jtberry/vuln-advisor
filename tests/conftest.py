@@ -131,7 +131,7 @@ def api_client() -> Generator[tuple[TestClient, str, int], None, None]:
 
     app.router.lifespan_context = _patch_lifespan(user_store, cmdb)
 
-    with TestClient(app, raise_server_exceptions=True) as client:
+    with TestClient(app, base_url="http://localhost", raise_server_exceptions=True) as client:
         yield client, token, uid
 
     user_store.close()
@@ -145,6 +145,10 @@ def web_client() -> Generator[tuple[TestClient, str], None, None]:
     follow_redirects=False is essential for web route tests: we assert on
     redirect *locations* (e.g. 302 to /login), which are invisible once
     the client follows the redirect and returns the final 200 response.
+
+    base_url="http://localhost" is required because TrustedHostMiddleware
+    in api/main.py allows only localhost and 127.0.0.1. The default TestClient
+    base URL is http://testserver, which is rejected with 400 Invalid host header.
     """
     user_store, cmdb = _make_test_stores("web")
 
@@ -159,7 +163,7 @@ def web_client() -> Generator[tuple[TestClient, str], None, None]:
 
     app.router.lifespan_context = _patch_lifespan(user_store, cmdb)
 
-    with TestClient(app, follow_redirects=False, raise_server_exceptions=True) as client:
+    with TestClient(app, base_url="http://localhost", follow_redirects=False, raise_server_exceptions=True) as client:
         yield client, token
 
     user_store.close()
