@@ -50,7 +50,7 @@ if _cfg.github_client_id and _cfg.github_client_secret:
         name="github",
         client_id=_cfg.github_client_id,
         client_secret=_cfg.github_client_secret,
-        access_token_url="https://github.com/login/oauth/access_token",  # noqa: S106 -- URL, not a password
+        access_token_url="https://github.com/login/oauth/access_token",  # nosec B106 # noqa: S106 -- URL not a password
         authorize_url="https://github.com/login/oauth/authorize",
         api_base_url="https://api.github.com/",
         client_kwargs={"scope": "read:user user:email"},

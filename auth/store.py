@@ -390,7 +390,7 @@ class UserStore:
                 params[k] = int(v)  # SLA days must be positive integers
         with self.engine.connect() as conn:
             # Column names are from a hardcoded allowlist (_APP_SETTINGS_KEYS), not user input
-            stmt = text(f"UPDATE app_settings SET {set_clause} WHERE id = 1")  # noqa: S608 # nosemgrep
+            stmt = text(f"UPDATE app_settings SET {set_clause} WHERE id = 1")  # nosec B608 # noqa: S608 # nosemgrep
             conn.execute(stmt, params)
             conn.commit()
 

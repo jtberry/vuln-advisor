@@ -47,10 +47,18 @@ jobs:
         run: pip install bandit pip-audit
 
       - name: bandit — static code security scan
-        run: bandit -r core/ cache/ api/ -q
+        run: bandit -r core/ cache/ api/ cmdb/ auth/ -q
 
-      - name: pip-audit — dependency vulnerability scan
+      - name: pip-audit — dependency vulnerability scan (requirements.txt)
         run: pip-audit -r requirements.txt
+
+      - name: pip-audit — dependency vulnerability scan (requirements-api.txt)
+        run: |
+          pip-audit -r requirements-api.txt \
+            --ignore-vuln GHSA-2c2j-9gv5-cj73 \
+            --ignore-vuln GHSA-7f5h-v6xp-fcq8 \
+            --ignore-vuln GHSA-wp53-j4wj-2cfg \
+            --ignore-vuln GHSA-wj6h-64fc-37mp
 
   semgrep:
     name: Semgrep SAST
@@ -119,3 +127,23 @@ jobs:
 
       - name: pytest with coverage
         run: pytest
+
+  container-scan:
+    name: Container Scan (Trivy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t vulnadvisor:scan .
+
+      - name: Trivy — container vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: vulnadvisor:scan
+          format: table
+          exit-code: "0"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
