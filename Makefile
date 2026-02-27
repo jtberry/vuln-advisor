@@ -63,6 +63,8 @@ smoke: ## Verify all modules import cleanly
 	              from cache.store import CVECache; \
 	              from cmdb.store import CMDBStore; \
 	              from cmdb.ingest import parse_csv, parse_trivy_json; \
+	              from auth.tokens import create_access_token; \
+	              from web.routes import router; \
 	              print('  All imports OK')"
 
 check: lint security smoke ## Run all quality checks (lint + security + smoke)

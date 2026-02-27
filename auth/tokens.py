@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 import bcrypt
 from jose import JWTError, jwt
+from starlette.responses import Response
 
 from core.config import get_settings
 
@@ -231,7 +232,7 @@ def hash_api_key(raw_key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
+def set_auth_cookie(response: Response, token: str, expire_seconds: int = 0) -> None:
     """Write the JWT access token as an httpOnly cookie, plus a JS-readable expiry cookie.
 
     Sets two cookies:
@@ -248,7 +249,7 @@ def set_auth_cookie(response, token: str, expire_seconds: int = 0) -> None:
     provides CSRF mitigation for cross-site POST requests.
 
     Args:
-        response:       FastAPI/Starlette response object.
+        response:       Starlette Response (or FastAPI subclass) to set cookies on.
         token:          Encoded JWT string.
         expire_seconds: Cookie max_age in seconds. If 0 (default), uses
                         Settings.token_expire_seconds. Pass the same value
