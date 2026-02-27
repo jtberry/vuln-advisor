@@ -15,5 +15,11 @@
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        # 'unsafe-inline' in script-src is required for the data island pattern ({{ data | tojson }} in
+        # dashboard.html) and the session expiry script in layout.html. Nonce-based CSP would remove
+        # this requirement but needs server-side nonce injection on every request -- tracked as tech debt.
+        # 'unsafe-inline' in style-src covers the <style> block in layout.html.
+        # unpkg.com hosts htmx; cdn.jsdelivr.net hosts Bootstrap and Chart.js.
+        Content-Security-Policy "default-src 'self'; script-src 'self' cdn.jsdelivr.net unpkg.com 'unsafe-inline'; style-src 'self' cdn.jsdelivr.net 'unsafe-inline'; img-src 'self' data:; font-src 'self' cdn.jsdelivr.net; connect-src 'self'"
     }
 }
