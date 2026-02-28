@@ -26,21 +26,133 @@
 
 {# ── Asset table ─────────────────────────────────────────────────── #}
 {% if assets %}
-<div class="card">
+{#
+  x-data="assetTable" mounts the Alpine component defined in components.js.
+  The wrapper div is the Alpine component boundary -- all x-* attributes
+  inside it are scoped to this assetTable instance.
+
+  Pattern: Data-down / Events-up (DDEU). Server renders all rows; Alpine
+  reads data-* attributes and drives visibility without server round-trips.
+  Scale constraint: client-side filtering targets < ~500 assets.
+#}
+<div class="card" x-data="assetTable">
+
+  {# ── Search and filter toolbar ─────────────────────────────────── #}
+  <div class="card-header py-2 px-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+      {# Search input -- left side #}
+      <div class="d-flex align-items-center gap-2">
+        <div class="position-relative">
+          <input type="text"
+                 class="form-control form-control-sm"
+                 :value="search"
+                 @input="setSearch"
+                 placeholder="Search hostname, name, IP..."
+                 style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: 240px; padding-right: 28px">
+          {# Clear X button -- visible only when text present #}
+          <span x-show="search"
+                @click="clearSearch"
+                style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #8b949e; font-size: 0.75rem"
+                title="Clear search">&times;</span>
+        </div>
+        {# Result count -- updates as filters change via matchCount getter #}
+        <span x-text="matchCount + ' of ' + totalCount + ' assets'"
+              style="color: #8b949e; font-size: 0.82rem; white-space: nowrap"></span>
+      </div>
+
+      {# Filter dropdowns -- right side #}
+      <div class="d-flex align-items-center gap-2">
+        <select class="form-select form-select-sm"
+                @change="setCriticality"
+                :value="criticality"
+                style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
+          <option value="">All Criticalities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select class="form-select form-select-sm"
+                @change="setEnvironment"
+                :value="environment"
+                style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
+          <option value="">All Environments</option>
+          <option value="production">Production</option>
+          <option value="staging">Staging</option>
+          <option value="development">Development</option>
+        </select>
+        {# Clear filters link -- visible only when any filter is active #}
+        <a x-show="hasActiveFilters"
+           href="#"
+           @click.prevent="clearFilters"
+           style="font-size: 0.82rem; color: #58a6ff; white-space: nowrap">Clear filters</a>
+      </div>
+
+    </div>
+  </div>
+
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th style="padding-left: 1rem; min-width: 200px">Hostname</th>
+          {#
+            Sortable headers use @click="toggleSort('col')" to cycle through
+            three states: asc -> desc -> reset to hostname default.
+            Sort indicators use x-show with sortActive()/sortAsc() getters.
+            IP and Exposure are not sortable (text search covers IP lookup).
+          #}
+          <th @click="toggleSort('hostname')"
+              style="padding-left: 1rem; min-width: 200px; cursor: pointer; user-select: none">
+            Hostname
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
+                  x-show="!sortActive('hostname')">&#x25B2;&#x25BC;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortAsc('hostname')">&#x25B2;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortActive('hostname') && !sortAsc('hostname')">&#x25BC;</span>
+          </th>
           <th>IP</th>
-          <th>Environment</th>
+          <th @click="toggleSort('environment')"
+              style="cursor: pointer; user-select: none">
+            Environment
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
+                  x-show="!sortActive('environment')">&#x25B2;&#x25BC;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortAsc('environment')">&#x25B2;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortActive('environment') && !sortAsc('environment')">&#x25BC;</span>
+          </th>
           <th>Exposure</th>
-          <th>Criticality</th>
+          <th @click="toggleSort('criticality')"
+              style="cursor: pointer; user-select: none">
+            Criticality
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
+                  x-show="!sortActive('criticality')">&#x25B2;&#x25BC;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortAsc('criticality')">&#x25B2;</span>
+            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
+                  x-show="sortActive('criticality') && !sortAsc('criticality')">&#x25BC;</span>
+          </th>
         </tr>
       </thead>
       <tbody>
         {% for asset in assets %}
-        <tr>
+        {#
+          data-row: selector used by Alpine init() to find all asset rows.
+          data-hostname/ip/name: lowercased in the template for consistent
+            substring matching. data-name mirrors hostname (assets don't
+            have a separate display name field).
+          data-criticality/environment: exact-match filter fields.
+          data-vuln-count: reserved for future vuln-count sort (set to 0 now).
+        #}
+        <tr data-row
+            data-hostname="{{ asset.hostname | lower }}"
+            data-ip="{{ (asset.ip or '') | lower }}"
+            data-name="{{ asset.hostname | lower }}"
+            data-criticality="{{ asset.criticality }}"
+            data-environment="{{ asset.environment }}"
+            data-vuln-count="0">
           <td style="padding-left: 1rem">
             <a href="/assets/{{ asset.id }}"
                class="fw-semibold font-mono text-decoration-none"
@@ -72,6 +184,18 @@
           </td>
         </tr>
         {% endfor %}
+        {#
+          No-results empty state: shown when filters match nothing but rows exist.
+          style="display: none" prevents a flash of this row before Alpine mounts.
+          x-show re-evaluates once Alpine is ready.
+        #}
+        <tr x-show="matchCount === 0 && totalCount > 0" style="display: none">
+          <td colspan="5" class="text-center py-4">
+            <div style="color: #8b949e; font-size: 0.85rem">No assets match the current filters</div>
+            <a href="#" @click.prevent="clearFilters"
+               style="font-size: 0.82rem; color: #58a6ff">Clear all filters</a>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
