@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Searchable & Exportable
 status: active
-last_updated: "2026-02-28T23:45:16Z"
+last_updated: "2026-02-28T23:55:00Z"
 progress:
   total_phases: 14
   completed_phases: 11
   total_plans: 32
-  completed_plans: 32
+  completed_plans: 33
 ---
 
 # VulnAdvisor - State
@@ -23,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 12 of 14 (Search, Filter, and Sort)
-Plan: 1 of 2 completed
+Plan: 2 of 2 completed
 Status: Active
-Last activity: 2026-02-28 - Phase 12 Plan 01 complete (assetTable Alpine component + assets_list.html toolbar wired)
+Last activity: 2026-02-28 - Phase 12 Plan 02 complete (vulnTable Alpine component + asset_detail.html toolbar wired)
 
-Progress: [#######---] Plan 1/2 (Phase 12)
+Progress: [##########] Plan 2/2 (Phase 12 COMPLETE)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (Phase 12)
-- Average duration: 18min
-- Total execution time: 18min
+- Total plans completed: 2 (Phase 12)
+- Average duration: 26min
+- Total execution time: 53min
 
 **By Phase:**
 
@@ -46,6 +46,7 @@ Progress: [#######---] Plan 1/2 (Phase 12)
 | Phase 11-foundation-alpine-setup P01 | 16 | 2 tasks | 6 files |
 | Phase 11-foundation-alpine-setup P02 | 18min | 2 tasks | 8 files |
 | Phase 12-search-filter-and-sort P01 | 18min | 2 tasks | 3 files |
+| Phase 12-search-filter-and-sort P02 | 35min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - [Phase 12-search-filter-and-sort]: EnvironmentEnum = production/staging/development (not internal); ExposureEnum = internet/internal/isolated -- plan's filter dropdown options corrected at execution
 - [Phase 12-search-filter-and-sort]: data-name mirrors data-hostname (no separate display-name field on assets); data-vuln-count hardcoded 0 for now
 - [Phase 12-search-filter-and-sort]: URL sync omits sort/dir params when state matches default (hostname A-Z) to keep URLs clean
+- [Phase 12-search-filter-and-sort P02]: x-data="vulnTable" on outer card div (not tbody) -- HTMX hx-swap=innerHTML targets tbody; outer-card pattern keeps Alpine alive during HTMX swaps
+- [Phase 12-search-filter-and-sort P02]: Default sort severity desc (P1 first); ordinal P1=0, dir=-1 puts lower-ordinal rows first
+- [Phase 12-search-filter-and-sort P02]: cache.get.return_value=None in test fixture to prevent MagicMock SQLAlchemy bind failure
 
 ### Pending Todos
 
@@ -79,5 +83,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-28
-Stopped at: Completed 12-01-PLAN.md -- assetTable Alpine component + assets_list.html toolbar (Phase 12 Plan 01)
+Stopped at: Completed 12-02-PLAN.md -- vulnTable Alpine component + asset_detail.html toolbar wired (Phase 12 Plan 02, Phase 12 COMPLETE)
 Resume file: None
