@@ -1,17 +1,17 @@
 """
-tests/test_phase12_search_filter.py -- Integration tests for Phase 12 Plan 01.
+tests/test_search_filter.py -- Integration tests for search, filter, and sort.
 
-Covers the Alpine.js assetTable component wiring on assets_list.html:
+Covers the vanilla JS AssetTableFilter wiring on assets_list.html:
   - data-* attributes on <tr> rows (hostname, ip, name, criticality, environment)
-  - x-data="assetTable" on the card wrapper div
-  - Search input with :value and @input handlers
-  - Criticality and environment filter dropdowns with @change handlers
-  - Sortable column headers with @click="toggleSort" references
-  - Result count span with x-text containing matchCount
+  - id="asset-table-card" on the card wrapper div (JS mount point)
+  - Search input with id="asset-search-input" (components.js wires addEventListener)
+  - Criticality and environment filter dropdowns with id-based wiring
+  - Sortable column headers with id="sort-*" attributes
+  - Result count span with id="asset-count-label" (JS sets textContent)
 
 These tests verify server-rendered HTML structure only (no headless browser).
-JavaScript behavior is tested manually via the browser. Alpine attribute
-presence is a sufficient proxy for correct wiring.
+JavaScript behavior is tested manually via the browser. ID attribute presence
+is a sufficient proxy for correct vanilla JS wiring.
 
 Fixture design: module-scoped for performance. One asset is created via the
 API before the test module runs, then the /assets page is fetched once and
@@ -79,7 +79,7 @@ def assets_page(web_client: tuple[TestClient, str]) -> tuple[str, int]:
 def test_assets_list_row_data_attrs(assets_page: tuple[str, int]) -> None:
     """Rows have data-row marker and data-hostname, data-ip, data-name attributes."""
     html, _asset_id = assets_page
-    assert "data-row" in html, "<tr data-row> attribute not found -- Alpine init() reads tr[data-row] selectors"
+    assert "data-row" in html, "<tr data-row> attribute not found -- AssetTableFilter reads tr[data-row] selectors"
     assert "data-hostname=" in html, "data-hostname attribute missing from <tr>"
     assert "data-ip=" in html, "data-ip attribute missing from <tr>"
     assert "data-name=" in html, "data-name attribute missing from <tr>"
@@ -90,7 +90,7 @@ def test_assets_list_criticality_attr(assets_page: tuple[str, int]) -> None:
     html, _asset_id = assets_page
     assert 'data-criticality="high"' in html, (
         "data-criticality attribute not found or does not match 'high'. "
-        "Alpine setCriticality() filters on this attribute."
+        "AssetTableFilter._onCritChange() filters on this attribute."
     )
 
 
@@ -99,33 +99,32 @@ def test_assets_list_environment_attr(assets_page: tuple[str, int]) -> None:
     html, _asset_id = assets_page
     assert 'data-environment="production"' in html, (
         "data-environment attribute not found or does not match 'production'. "
-        "Alpine setEnvironment() filters on this attribute."
+        "AssetTableFilter._onEnvChange() filters on this attribute."
     )
 
 
 # ---------------------------------------------------------------------------
-# Tests: Alpine wiring on the wrapper and headers
+# Tests: vanilla JS wiring on the wrapper and headers
 # ---------------------------------------------------------------------------
 
 
-def test_alpine_xdata_wrapper_assets(assets_page: tuple[str, int]) -> None:
-    """The outer card div has x-data=\"assetTable\" to mount the Alpine component."""
+def test_vanilla_wrapper_assets(assets_page: tuple[str, int]) -> None:
+    """The outer card div has id=\"asset-table-card\" as the JS mount point."""
     html, _asset_id = assets_page
-    assert 'x-data="assetTable"' in html, (
-        'x-data="assetTable" not found on the card wrapper. '
-        "Alpine will not initialize the component without this attribute."
+    assert 'id="asset-table-card"' in html, (
+        'id="asset-table-card" not found on the card wrapper. '
+        "AssetTableFilter constructor looks up this element via getElementById."
     )
 
 
 def test_assets_list_sort_headers(assets_page: tuple[str, int]) -> None:
-    """Column headers for hostname, criticality, environment have @click=\"toggleSort\" references."""
+    """Column headers have id attributes for per-column sort wiring."""
     html, _asset_id = assets_page
-    # All three sortable headers must be present
-    toggle_count = html.count("toggleSort")
-    assert toggle_count >= 3, (
-        f"Expected at least 3 toggleSort references (hostname, criticality, environment), found {toggle_count}. "
-        "Sortable headers need @click=\"toggleSort('col')\" attributes."
-    )
+    for sort_id in ("sort-hostname", "sort-environment", "sort-criticality"):
+        assert 'id="' + sort_id + '"' in html, (
+            f'id="{sort_id}" not found in HTML. '
+            f"Sortable headers need id attributes for components.js addEventListener wiring."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -134,33 +133,31 @@ def test_assets_list_sort_headers(assets_page: tuple[str, int]) -> None:
 
 
 def test_assets_search_input(assets_page: tuple[str, int]) -> None:
-    """Search input with :value=\"search\" and @input=\"setSearch\" exists in toolbar."""
+    """Search input with id=\"asset-search-input\" exists in toolbar."""
     html, _asset_id = assets_page
-    assert ':value="search"' in html or ':value="search"' in html, (
-        ':value="search" binding not found on search input. '
-        "Alpine uses :value + @input instead of x-model to comply with CSP."
+    assert 'id="asset-search-input"' in html, (
+        'id="asset-search-input" not found on search input. '
+        "AssetTableFilter wires input listener via getElementById('asset-search-input')."
     )
-    assert (
-        '@input="setSearch"' in html or "@input='setSearch'" in html
-    ), '@input="setSearch" handler not found on search input.'
 
 
 def test_assets_filter_dropdowns(assets_page: tuple[str, int]) -> None:
-    """Criticality and environment select dropdowns exist with @change handlers."""
+    """Criticality and environment select dropdowns exist with id attributes."""
     html, _asset_id = assets_page
     assert (
-        "setCriticality" in html
-    ), 'setCriticality handler not found. Criticality dropdown needs @change="setCriticality".'
+        'id="asset-crit-select"' in html
+    ), 'id="asset-crit-select" not found. Criticality dropdown needs this id for components.js wiring.'
     assert (
-        "setEnvironment" in html
-    ), 'setEnvironment handler not found. Environment dropdown needs @change="setEnvironment".'
+        'id="asset-env-select"' in html
+    ), 'id="asset-env-select" not found. Environment dropdown needs this id for components.js wiring.'
 
 
 def test_assets_result_count(assets_page: tuple[str, int]) -> None:
-    """Result count span with x-text containing matchCount exists in toolbar."""
+    """Result count span with id=\"asset-count-label\" exists in toolbar."""
     html, _asset_id = assets_page
-    assert "matchCount" in html, (
-        "matchCount not found in HTML. " "The result count span needs x-text bound to a matchCount expression."
+    assert 'id="asset-count-label"' in html, (
+        'id="asset-count-label" not found in HTML. '
+        "AssetTableFilter._updateUiState() sets textContent on this element."
     )
 
 
@@ -267,13 +264,12 @@ def test_vuln_row_cvss_attr(asset_detail_page: tuple[str, int]) -> None:
 
 
 def test_vuln_table_sort_headers(asset_detail_page: tuple[str, int]) -> None:
-    """Vuln table has sortable headers for CVE, Priority, CVSS, Status with toggleSort references."""
+    """Vuln table has per-column sort headers (Plan 02 will wire these with vanilla JS ids)."""
     html, _asset_id = asset_detail_page
-    toggle_count = html.count("toggleSort")
-    assert toggle_count >= 4, (
-        f"Expected at least 4 toggleSort references (cve, severity, cvss, status), found {toggle_count}. "
-        "Sortable headers need @click=\"toggleSort('col')\" attributes."
-    )
+    for method in ("sortByCve", "sortBySeverity", "sortByCvss", "sortByStatus"):
+        assert method in html, (
+            f"{method} not found in HTML. " f'Sortable headers need @click="{method}" (CSP-safe per-column handler).'
+        )
 
 
 def test_alpine_xdata_wrapper_vulns(asset_detail_page: tuple[str, int]) -> None:
@@ -286,11 +282,11 @@ def test_alpine_xdata_wrapper_vulns(asset_detail_page: tuple[str, int]) -> None:
 
 
 def test_vuln_search_input(asset_detail_page: tuple[str, int]) -> None:
-    """Search input with :value=\"search\" and @input=\"setSearch\" exists in the vuln card."""
+    """Search input with x-ref and @input=\"setSearch\" exists in the vuln card."""
     html, _asset_id = asset_detail_page
-    assert ':value="search"' in html, (
-        ':value="search" binding not found on vuln search input. '
-        "Alpine uses :value + @input instead of x-model to comply with CSP."
+    assert 'x-ref="searchInput"' in html, (
+        'x-ref="searchInput" not found on vuln search input. '
+        "Alpine CSP uses $refs instead of event.target.value to read inputs."
     )
     assert (
         '@input="setSearch"' in html or "@input='setSearch'" in html
