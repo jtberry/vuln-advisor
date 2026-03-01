@@ -16,10 +16,10 @@
 
 ### 🚧 v1.1 Searchable & Exportable (In Progress)
 
-**Milestone Goal:** Make existing data explorable and extractable. Clean v1.0 debt, wire Alpine.js for interactivity, add search/filter/sort on asset and CVE tables, fix API key management page, and deliver CSV export.
+**Milestone Goal:** Make existing data explorable and extractable. Clean v1.0 debt, add client-side interactivity for search/filter/sort on asset and CVE tables, fix API key management page, and deliver CSV export.
 
 - [x] **Phase 11: Foundation & Alpine Setup** - Clear v1.0 audit debt and wire Alpine.js globally (completed 2026-02-27)
-- [x] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (completed 2026-03-01)
+- [ ] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (replanned: vanilla JS replacing Alpine.js)
 - [ ] **Phase 13: API Key Management** - Working web page to list, create, and revoke API keys
 - [ ] **Phase 14: CSV Export** - Downloadable filtered asset and vulnerability data
 
@@ -50,8 +50,8 @@
   4. User can search and filter the vulnerability table on an asset detail page by CVE ID, description, severity, and status
   5. Sharing the page URL with active filters reproduces the same filtered view in a new browser tab
 **Plans**: 2 plans
-- [ ] 12-01-PLAN.md -- Asset table search, filter, sort, and URL sync (SRCH-01 through SRCH-04, SRCH-09)
-- [ ] 12-02-PLAN.md -- Vulnerability table search, filter, sort, HTMX resilience, and checkbox fix (SRCH-05 through SRCH-09)
+- [ ] 12-01-PLAN.md -- Asset table vanilla JS filter/sort, Alpine CDN removal, test updates (SRCH-01 through SRCH-04, SRCH-09)
+- [ ] 12-02-PLAN.md -- Vuln table vanilla JS filter/sort, HTMX bridge, checkbox fix, test updates (SRCH-05 through SRCH-09)
 
 ### Phase 13: API Key Management
 **Goal**: Users can manage their API keys from the web UI without using the REST API directly, and the dead nav link is permanently fixed
@@ -76,12 +76,12 @@
 
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 11 → 12 → 13 → 14
+**Execution Order:** Phases execute in numeric order: 11 -> 12 -> 13 -> 14
 Note: Phases 12 and 13 are independent of each other and can be implemented in parallel if desired.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Foundation & Alpine Setup | 2/2 | Complete    | 2026-02-27 | - |
-| 12. Search, Filter, and Sort | 2/2 | Complete   | 2026-03-01 | - |
+| 12. Search, Filter, and Sort | 1/2 | In Progress|  | - |
 | 13. API Key Management | v1.1 | 0/? | Not started | - |
 | 14. CSV Export | v1.1 | 0/? | Not started | - |

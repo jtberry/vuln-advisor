@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Searchable & Exportable
-status: active
-last_updated: "2026-02-28T23:55:00Z"
+status: unknown
+last_updated: "2026-03-01T23:47:48.244Z"
 progress:
-  total_phases: 14
-  completed_phases: 11
-  total_plans: 32
-  completed_plans: 33
+  total_phases: 12
+  completed_phases: 10
+  total_plans: 34
+  completed_plans: 32
 ---
 
 # VulnAdvisor - State
@@ -47,6 +47,7 @@ Progress: [##########] Plan 2/2 (Phase 12 COMPLETE)
 | Phase 11-foundation-alpine-setup P02 | 18min | 2 tasks | 8 files |
 | Phase 12-search-filter-and-sort P01 | 18min | 2 tasks | 3 files |
 | Phase 12-search-filter-and-sort P02 | 35min | 2 tasks | 4 files |
+| Phase 12-search-filter-and-sort P01 | 25 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 12-search-filter-and-sort P02]: x-data="vulnTable" on outer card div (not tbody) -- HTMX hx-swap=innerHTML targets tbody; outer-card pattern keeps Alpine alive during HTMX swaps
 - [Phase 12-search-filter-and-sort P02]: Default sort severity desc (P1 first); ordinal P1=0, dir=-1 puts lower-ordinal rows first
 - [Phase 12-search-filter-and-sort P02]: cache.get.return_value=None in test fixture to prevent MagicMock SQLAlchemy bind failure
+- [Phase 12-search-filter-and-sort]: Alpine CDN fully removed in Plan 01 rewrite: vanilla JS AssetTableFilter is 100% CSP-safe without eval/new Function()
+- [Phase 12-search-filter-and-sort]: Prototype-based class pattern used for AssetTableFilter (function + .prototype) -- consistent with var self closure pattern and broad browser compatibility
 
 ### Pending Todos
 
