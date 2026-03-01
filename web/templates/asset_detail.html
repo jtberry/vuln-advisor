@@ -154,19 +154,19 @@
 
 {# ── Vulnerability table ─────────────────────────────────────────── #}
 {#
-   x-data="vulnTable" is placed on the outer card div, not on the tbody.
+   id="vuln-table-card" is placed on the outer card div, not on the tbody.
    Architectural reason: the HTMX add-CVE form targets #vuln-table-body
-   with hx-swap="innerHTML". If Alpine owned the tbody, HTMX's replacement
-   would destroy the Alpine component. By placing x-data on the outer card,
-   HTMX swaps happen inside Alpine's scope without touching the component root.
+   with hx-swap="innerHTML". If VulnTableFilter owned the tbody, HTMX's
+   replacement would orphan the component's DOM references. By anchoring
+   on the outer card div, HTMX swaps happen inside the component's scope.
    After each swap, the htmx:afterSwap listener in components.js calls
-   refreshRows() to re-read the new DOM into this.rows.
+   refreshRows() to re-scan the live DOM and re-apply current filter state.
 #}
-<div class="card" x-data="vulnTable">
+<div class="card" id="vuln-table-card">
   <div class="card-header py-2 px-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <span class="fw-semibold" style="color: #e6edf3; font-size: 0.9rem">Vulnerabilities</span>
-      <span x-text="matchCount + ' of ' + totalCount + ' vulnerabilities'"
+      <span id="vuln-count-label"
             style="color: #8b949e; font-size: 0.75rem"></span>
     </div>
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -174,22 +174,19 @@
       {# Search input -- left side #}
       <div class="position-relative">
         <input type="text"
+               id="vuln-search-input"
                class="form-control form-control-sm"
-               :value="search"
-               @input="setSearch"
                placeholder="Search CVE ID or description..."
                style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: 240px; padding-right: 28px">
-        <span x-show="search"
-              @click="clearSearch"
-              style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #8b949e; font-size: 0.75rem"
+        <span id="vuln-clear-search"
+              style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #8b949e; font-size: 0.75rem; display: none"
               title="Clear search">&times;</span>
       </div>
 
       {# Filter dropdowns -- right side #}
       <div class="d-flex align-items-center gap-2">
-        <select class="form-select form-select-sm"
-                @change="setSeverity"
-                :value="severity"
+        <select id="vuln-severity-select"
+                class="form-select form-select-sm"
                 style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
           <option value="">All Severities</option>
           <option value="p1">P1 - Critical</option>
@@ -197,9 +194,8 @@
           <option value="p3">P3 - Medium</option>
           <option value="p4">P4 - Low</option>
         </select>
-        <select class="form-select form-select-sm"
-                @change="setStatus"
-                :value="status"
+        <select id="vuln-status-select"
+                class="form-select form-select-sm"
                 style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
           <option value="">All Statuses</option>
           <option value="open">Open</option>
@@ -208,10 +204,9 @@
           <option value="deferred">Deferred</option>
           <option value="closed">Closed</option>
         </select>
-        <a x-show="hasActiveFilters"
-           href="#"
-           @click.prevent="clearFilters"
-           style="font-size: 0.82rem; color: #58a6ff; white-space: nowrap">Clear filters</a>
+        <a id="vuln-clear-filters"
+           href="javascript:void(0)"
+           style="font-size: 0.82rem; color: #58a6ff; white-space: nowrap; display: none">Clear filters</a>
       </div>
 
     </div>
@@ -239,47 +234,47 @@
           <th style="width: 32px; padding-left: 0.75rem" class="text-center">
             <input type="checkbox" class="form-check-input" id="selectAllVulns" title="Select all">
           </th>
-          <th @click="toggleSort('cve')"
+          <th id="sort-cve"
               style="padding-left: 0.5rem; min-width: 160px; cursor: pointer; user-select: none">
             CVE
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
-                  x-show="!sortActive('cve')">&#x25B2;&#x25BC;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortAsc('cve')">&#x25B2;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortActive('cve') && !sortAsc('cve')">&#x25BC;</span>
+            <span data-sort-col="cve" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="cve" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="cve" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
           </th>
-          <th @click="toggleSort('severity')"
+          <th id="sort-severity"
               style="cursor: pointer; user-select: none">
             Priority
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
-                  x-show="!sortActive('severity')">&#x25B2;&#x25BC;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortAsc('severity')">&#x25B2;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortActive('severity') && !sortAsc('severity')">&#x25BC;</span>
+            <span data-sort-col="severity" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="severity" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="severity" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
           </th>
-          <th @click="toggleSort('cvss')"
+          <th id="sort-cvss"
               style="cursor: pointer; user-select: none">
             CVSS
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
-                  x-show="!sortActive('cvss')">&#x25B2;&#x25BC;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortAsc('cvss')">&#x25B2;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortActive('cvss') && !sortAsc('cvss')">&#x25BC;</span>
+            <span data-sort-col="cvss" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="cvss" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="cvss" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
           </th>
           <th style="min-width: 220px">Description</th>
           <th>KEV</th>
-          <th @click="toggleSort('status')"
+          <th id="sort-status"
               style="cursor: pointer; user-select: none">
             Status
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #8b949e"
-                  x-show="!sortActive('status')">&#x25B2;&#x25BC;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortAsc('status')">&#x25B2;</span>
-            <span style="font-size: 0.6rem; margin-left: 2px; color: #58a6ff"
-                  x-show="sortActive('status') && !sortAsc('status')">&#x25BC;</span>
+            <span data-sort-col="status" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="status" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="status" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
           </th>
           <th>Owner</th>
           <th>SLA Deadline</th>
@@ -293,12 +288,13 @@
         {% set nvd_url       = row.nvd_url %}
         {% include "partials/vuln_row.html" %}
         {% endfor %}
-        {# Empty-state row: shown by Alpine when filters match nothing.
-           data-empty-state (no data-row) ensures readRows() excludes it from this.rows. #}
-        <tr x-show="matchCount === 0 && totalCount > 0" style="display: none" data-empty-state>
+        {# Empty-state row: shown by VulnTableFilter when filters match nothing.
+           data-empty-state (no data-row) ensures _readRows() excludes it from this.rows. #}
+        <tr id="vuln-no-results" style="display: none" data-empty-state>
           <td colspan="9" class="text-center py-4">
             <div style="color: #8b949e; font-size: 0.85rem">No vulnerabilities match the current filters</div>
-            <a href="#" @click.prevent="clearFilters"
+            <a id="vuln-no-results-clear"
+               href="javascript:void(0)"
                style="font-size: 0.82rem; color: #58a6ff">Clear all filters</a>
           </td>
         </tr>
@@ -348,7 +344,7 @@
   if (!selectAll) return; // No vulns on page -- nothing to do
 
   // ── Collect visible .vuln-checkbox elements ───────────────────────
-  // Filter out checkboxes in rows hidden by the Alpine vulnTable filter.
+  // Filter out checkboxes in rows hidden by the VulnTableFilter.
   // Without this filter, "Select All" would also select non-visible rows,
   // and the selectedCount display would be wrong.
   function getCheckboxes() {
