@@ -1,7 +1,7 @@
 """
-tests/test_phase11_debt.py -- Integration tests for Phase 11 Plan 02 debt items.
+tests/test_debt_cleanup.py -- Integration tests for v1.0 audit debt items.
 
-Covers DEBT-05, DEBT-06, DEBT-07 from the v1.0 audit:
+Covers DEBT-05, DEBT-06, DEBT-07:
   DEBT-05: /account/api-keys route exists and requires auth
   DEBT-06: update_vuln_status_htmx accepts from_status form field
   DEBT-07: NVD_API_KEY is read from Settings, not os.environ directly
