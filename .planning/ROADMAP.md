@@ -19,7 +19,7 @@
 **Milestone Goal:** Make existing data explorable and extractable. Clean v1.0 debt, add client-side interactivity for search/filter/sort on asset and CVE tables, fix API key management page, and deliver CSV export.
 
 - [x] **Phase 11: Foundation & Alpine Setup** - Clear v1.0 audit debt and wire Alpine.js globally (completed 2026-02-27)
-- [ ] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (replanned: vanilla JS replacing Alpine.js)
+- [x] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (replanned: vanilla JS replacing Alpine.js) (completed 2026-03-02)
 - [ ] **Phase 13: API Key Management** - Working web page to list, create, and revoke API keys
 - [ ] **Phase 14: CSV Export** - Downloadable filtered asset and vulnerability data
 
@@ -82,6 +82,6 @@ Note: Phases 12 and 13 are independent of each other and can be implemented in p
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Foundation & Alpine Setup | 2/2 | Complete    | 2026-02-27 | - |
-| 12. Search, Filter, and Sort | 1/2 | In Progress|  | - |
+| 12. Search, Filter, and Sort | 2/2 | Complete   | 2026-03-02 | - |
 | 13. API Key Management | v1.1 | 0/? | Not started | - |
 | 14. CSV Export | v1.1 | 0/? | Not started | - |

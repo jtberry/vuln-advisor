@@ -1,147 +1,90 @@
 ---
 phase: 12-search-filter-and-sort
 plan: "02"
-subsystem: ui
-tags: [alpine.js, htmx, javascript, jinja2, testing]
-
-# Dependency graph
-requires:
-  - phase: 12-01
-    provides: assetTable Alpine component and assets_list.html wiring as reference pattern
-  - phase: 11-foundation-alpine-setup
-    provides: Alpine CSP build, components.js file, HTMX bridge foundation
-
-provides:
-  - vulnTable Alpine.data() component with search, severity/status filter, column sort, URL sync
-  - HTMX coexistence via outer-card x-data pattern (vulnTable root outside tbody)
-  - refreshRows() method called after HTMX swaps to re-read new DOM rows
-  - data-row, data-cve, data-description, data-severity, data-cvss, data-status on vuln <tr>
-  - Sortable headers for CVE, Priority, CVSS, Status with three-state sort indicators
-  - Checkbox fix: getCheckboxes() filters hidden rows so Select All only hits visible rows
-  - 8 integration tests for vuln table HTML structure (16 total Phase 12 tests)
-
-affects:
-  - Any phase that modifies asset_detail.html or vuln_row.html
-  - Phase 13 (CSV export) if it adds columns to the vuln table
-  - Any future server-side pagination that replaces client-side filtering
-
-# Tech tracking
-tech-stack:
+subsystem: web/frontend
+tags: [vanilla-js, search, filter, sort, htmx, vulnerability-table]
+dependency_graph:
+  requires: [12-01]
+  provides: [VulnTableFilter class, vuln table search/filter/sort, HTMX swap resilience]
+  affects: [web/templates/asset_detail.html, web/static/js/components.js]
+tech_stack:
   added: []
-  patterns:
-    - "Outer-card x-data pattern: Alpine root on card div, not tbody, so HTMX swaps happen inside Alpine scope without destroying component"
-    - "refreshRows() bridge: HTMX afterSwap listener re-reads DOM into this.rows array after HTMX innerHTML swap"
-    - "Ordinal map sort: _severityOrdinal and _statusOrdinal for semantic sort (P1=0 ... P4=3)"
-    - "Vanilla JS coexistence: Alpine owns filter/sort, vanilla JS owns checkboxes; getCheckboxes() visibility filter is the bridge"
-    - "CSP-safe handlers: @input/:value pattern instead of x-model; function(){} syntax, no arrow functions or template literals"
-
-key-files:
+  patterns: [prototype-based JS class, data-down/events-up, outer-card HTMX anchor]
+key_files:
   created: []
   modified:
-    - web/static/js/components.js
     - web/templates/asset_detail.html
-    - web/templates/partials/vuln_row.html
-    - tests/test_phase12_search_filter.py
-
-key-decisions:
-  - "x-data='vulnTable' on outer card div (not tbody): required because HTMX hx-swap=innerHTML targets #vuln-table-body; if Alpine owned tbody, the swap would destroy the component"
-  - "data-cve lowercased on <tr> for case-insensitive search; original casing preserved via data-cve-id on checkbox element for vanilla JS bulk actions"
-  - "Default sort: severity descending (P1/Critical first) on page load; dir=desc with ordinal P1=0 means P1 sorts first in ascending-ordinal order with desc multiplier"
-  - "URL sync omits sort/dir params when state matches default (severity desc) to keep URLs clean"
-  - "Empty-state row uses data-empty-state (no data-row) so readRows() excludes it from this.rows array"
-  - "cache.get.return_value = None in test fixture: prevents MagicMock being used as EnrichedCVE (which fails SQLAlchemy binding)"
-
-patterns-established:
-  - "Outer-card Alpine root pattern: whenever HTMX targets a tbody inside an Alpine component, x-data must be on an ancestor outside the HTMX target"
-  - "refreshRows contract: any HTMX swap into a tbody inside a vulnTable must be followed by a refreshRows() call to re-sync the rows array"
-  - "Ordinal map pattern for semantic sort: pre-compute rank maps in init(), reference in _applyVisibility() sort comparator"
-
-requirements-completed: [SRCH-05, SRCH-06, SRCH-07, SRCH-08, SRCH-09]
-
-# Metrics
-duration: 35min
-completed: 2026-02-28
+    - web/static/js/components.js
+    - tests/test_search_filter.py
+    - tests/test_csp_alpine.py
+decisions:
+  - "VulnTableFilter anchors on outer card div (id=vuln-table-card), not tbody -- HTMX hx-swap=innerHTML targets tbody; outer-card pattern keeps component alive during HTMX swaps"
+  - "Prototype-based class pattern (function VulnTableFilter + .prototype) -- consistent with AssetTableFilter and var self closure; broad browser compatibility"
+  - "Default sort severity desc (P1 first); toggleSort three-state cycles back to severity/desc default"
+  - "refreshRows() public method called by HTMX bridge after swap; re-scans live DOM and re-applies current filter/sort state"
+  - "test_csp_alpine.py Alpine CDN tests updated to assert Alpine absent (removed in Plan 01) and components.js nonce present"
+metrics:
+  duration: "35min"
+  completed: "2026-03-01"
+  tasks_completed: 2
+  files_modified: 4
+requirements: [SRCH-05, SRCH-06, SRCH-07, SRCH-08, SRCH-09]
 ---
 
-# Phase 12 Plan 02: Search, Filter, and Sort -- Vuln Table Summary
+# Phase 12 Plan 02: VulnTableFilter Vanilla JS Class Summary
 
-**vulnTable Alpine.js component with search/filter/sort/URL-sync wired to asset detail page, with HTMX coexistence via outer-card x-data pattern and checkbox visibility fix**
+**One-liner:** VulnTableFilter vanilla JS class with search, severity/status filters, semantic sort, URL sync, and HTMX swap resilience replacing the previous Alpine.js vulnTable component.
 
-## Performance
+## What Was Built
 
-- **Duration:** 35 min
-- **Started:** 2026-02-28T23:45:00Z
-- **Completed:** 2026-02-28T23:20:00Z (approx)
-- **Tasks:** 2
-- **Files modified:** 4
+The vulnerability table on the asset detail page now has fully interactive filtering via a vanilla JS class (`VulnTableFilter`) following the same prototype-based pattern as `AssetTableFilter` from Plan 01.
 
-## Accomplishments
+### Key behaviors delivered
 
-- vulnTable Alpine.data() component registered in components.js with full search (CVE ID + description), severity/status dropdowns, four-column sort (cve/severity/cvss/status with semantic ordinal maps), URL param persistence, and refreshRows() for HTMX coexistence
-- asset_detail.html wired: x-data="vulnTable" on outer card (not tbody), search toolbar, sortable headers, empty-state row, vanilla JS checkbox fix
-- vuln_row.html extended with data-row, data-cve, data-description, data-severity, data-cvss, data-status for Alpine readRows()
-- 8 new integration tests (16 total for Phase 12); 207/207 full suite passing
+- **Text search:** Substring match on CVE ID and description (case-insensitive, debounced URL sync)
+- **Severity filter:** Exact match dropdown (p1/p2/p3/p4) with semantic ordinal sort (P1=0, P2=1, P3=2, P4=3)
+- **Status filter:** Exact match dropdown (open/in_review/remediated/deferred/closed) with semantic ordinal sort
+- **Sort:** Three-state cycle (asc -> desc -> default=severity desc) on CVE ID, priority, CVSS, status columns
+- **URL sync:** `history.replaceState()` mirrors state to query params; sharing URL reproduces filtered view; sort/dir omitted when state matches default (severity desc) to keep URLs clean
+- **HTMX resilience:** `refreshRows()` called after `htmx:afterSwap` on `#vuln-table-body` re-scans live DOM so newly-added CVEs respect active filters
+- **Checkbox coexistence:** Vanilla JS checkbox code already filters `cb.closest('tr').style.display !== 'none'`; VulnTableFilter does not own checkboxes
 
-## Task Commits
+### Architecture: outer-card anchor pattern
 
-Each task was committed atomically:
+The HTMX add-CVE form targets `#vuln-table-body` with `hx-swap="innerHTML"`. If VulnTableFilter owned the tbody, HTMX's DOM replacement would orphan the component's `this.rows` array (stale detached `<tr>` references). By anchoring the component on the outer card div (`id="vuln-table-card"`), the tbody swap happens inside the component's scope without destroying it. The `htmx:afterSwap` bridge then calls `refreshRows()` to re-read the updated DOM.
 
-1. **Task 1: Add vulnTable component to components.js and extend test scaffold** - `153a9cf` (feat)
-2. **Task 2: Wire asset_detail.html and vuln_row.html** - `bc338f3` (feat)
+## Tasks Completed
 
-## Files Created/Modified
+| Task | Name | Commit | Files |
+|------|------|--------|-------|
+| 1 | Rewrite asset_detail.html vuln card toolbar to vanilla HTML | b785b99 | web/templates/asset_detail.html |
+| 2 | Add VulnTableFilter class, wire HTMX bridge, update tests | 7fd9141 | web/static/js/components.js, tests/test_search_filter.py, tests/test_csp_alpine.py |
 
-- `web/static/js/components.js` - Added vulnTable Alpine.data() component (search, filter, sort, URL sync, readRows, refreshRows) and second htmx:afterSwap listener for vulnTable re-sync
-- `web/templates/asset_detail.html` - Added x-data="vulnTable" on card div, search/filter toolbar, sortable headers, empty-state row, checkbox visibility fix
-- `web/templates/partials/vuln_row.html` - Added data-row, data-cve (lowercased), data-description, data-severity, data-cvss, data-status attributes to <tr>
-- `tests/test_phase12_search_filter.py` - Added asset_detail_page fixture and 8 vuln table structure tests
+## Verification Results
 
-## Decisions Made
+All plan verification checks passed:
 
-- **x-data on outer card, not tbody**: HTMX's hx-swap="innerHTML" replaces #vuln-table-body contents. If Alpine owned the tbody, the swap would destroy the Alpine component. The outer-card pattern keeps the component alive while HTMX operates inside its scope.
-- **data-cve lowercased on <tr>**: Search matching works case-insensitively. The original casing is preserved in data-cve-id on the checkbox element (used by vanilla JS bulk actions), so there is no conflict.
-- **Default sort: severity descending**: P1 (Critical) should appear first on page load. The ordinal map assigns P1=0, and with sortDir='desc', the comparator multiplies by -1, placing lower ordinal (more critical) rows first.
-- **cache.get.return_value = None in test fixture**: Without this, MagicMock.get() returns a truthy MagicMock used as a cache hit. That mock propagates through enrichment and produces a MagicMock as cve_id in the SQL INSERT, which SQLAlchemy cannot bind. Setting return_value to None forces a cache miss and lets the real enrichment path run (returning None from fetch_nvd in tests, which is handled gracefully).
+- `python -m pytest tests/test_search_filter.py -x -q` -- 16 passed (both asset and vuln table tests)
+- `python -m pytest tests/ -q` -- 207 passed, no regressions
+- `grep -c 'function VulnTableFilter' web/static/js/components.js` -- 1
+- `grep 'Alpine.data\|alpine:init\|_x_dataStack' web/static/js/components.js` -- 0 (zero functional Alpine code)
+- `grep -c 'x-data\|x-ref\|x-show\|x-text' web/templates/asset_detail.html` -- 0
+- `grep -c 'refreshRows' web/static/js/components.js` -- 7 (definition + bridge call + prototype methods)
+- `grep 'cb.closest' web/templates/asset_detail.html` -- checkbox hidden-row filter confirmed
 
 ## Deviations from Plan
 
 ### Auto-fixed Issues
 
-**1. [Rule 1 - Bug] Fixed wrong field name in test fixture API call**
-- **Found during:** Task 1 (test scaffold)
-- **Issue:** Test fixture posted `{"cve_ids": [...]}` but AssetVulnAssign model expects `{"ids": [...]}`. API returned 422.
-- **Fix:** Changed to `json={"ids": ["CVE-2021-44228"]}`.
-- **Files modified:** tests/test_phase12_search_filter.py
-- **Verification:** API returned 200, fixture proceeded.
-- **Committed in:** 153a9cf (Task 1 commit)
+**1. [Rule 1 - Bug] Fixed stale Alpine CDN assertions in test_csp_alpine.py**
 
-**2. [Rule 1 - Bug] Fixed MagicMock cache causing SQLAlchemy bind failure**
-- **Found during:** Task 1 (test scaffold)
-- **Issue:** conftest.py sets `app.state.cache = MagicMock()`. MagicMock.get() returns a truthy MagicMock treated as a cache hit. The MagicMock propagates through pipeline and becomes the cve_id parameter in the SQL INSERT. SQLAlchemy cannot bind MagicMock to a SQL parameter: `sqlite3.InterfaceError: Error binding parameter 1 - probably unsupported type`.
-- **Fix:** Set `app.state.cache.get.return_value = None` in the fixture before API calls. This forces a cache miss, process_cves() calls fetch_nvd() (which returns None in test env), and the route handles None enrichment gracefully by skipping the CVE.
-- **Files modified:** tests/test_phase12_search_filter.py
-- **Verification:** Fixture completes without error; asset detail page renders with vuln table.
-- **Committed in:** 153a9cf (Task 1 commit)
+- **Found during:** Task 2 (full test suite run)
+- **Issue:** `test_alpine_cdn_in_layout` and `test_alpine_scripts_have_nonce` asserted `@alpinejs/csp` presence in HTML. Alpine was removed in Plan 01 (commit `65a719d`), so these tests were wrong -- the code is correct, the tests were outdated.
+- **Fix:** Renamed `test_alpine_cdn_in_layout` to `test_no_alpine_cdn_in_layout` (now asserts Alpine is absent); renamed `test_alpine_scripts_have_nonce` to `test_components_js_has_nonce` (now checks `components.js` script tag has nonce); updated docstrings and file-level docstring to reflect vanilla JS architecture. Also updated `test_no_unsafe_eval_in_csp` docstring (removed Alpine reference).
+- **Files modified:** tests/test_csp_alpine.py
+- **Commit:** 7fd9141 (included in Task 2 commit)
 
----
+## Self-Check: PASSED
 
-**Total deviations:** 2 auto-fixed (2 Rule 1 bugs in test fixture)
-**Impact on plan:** Both fixes required to get the test fixture working. No scope creep. Template implementation was exactly as planned.
-
-## Issues Encountered
-
-The vuln table test fixture had two related issues (wrong field name, mock cache binding failure) that were both found and fixed during Task 1. Neither affected the production code -- both were test infrastructure issues arising from the difference between the test's mock environment and the plan's assumptions.
-
-## User Setup Required
-
-None - no external service configuration required.
-
-## Next Phase Readiness
-
-- Phase 12 complete: both assetTable (Plan 01) and vulnTable (Plan 02) are wired and tested
-- Phase 13 (CSV/report export) can proceed -- it may add columns to the vuln table; if so, vuln_row.html should be extended and readRows() may need updating if new columns need to be sortable
-- The outer-card x-data pattern is established and should be documented as a project convention for any future table components that coexist with HTMX swaps
-
----
-*Phase: 12-search-filter-and-sort*
-*Completed: 2026-02-28*
+All key files verified to exist. Both task commits verified in git log.
+207 tests pass with no regressions. Zero Alpine functional code in components.js or asset_detail.html.
