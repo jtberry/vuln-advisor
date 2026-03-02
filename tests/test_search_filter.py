@@ -22,6 +22,12 @@ These tests verify server-rendered HTML structure only (no headless browser).
 JavaScript behavior is tested manually via the browser. ID attribute presence
 is a sufficient proxy for correct vanilla JS wiring.
 
+Three-state sort cycle behavior (asc -> desc -> default reset on every column,
+including the default column) is verified via UAT, not integration tests.
+The fix uses an explicit _sortCycleStage counter in both AssetTableFilter and
+VulnTableFilter to make the three states distinguishable regardless of which
+column is the default.
+
 Fixture design: module-scoped for performance. One asset is created via the
 API before the test module runs, then the page is fetched once and reused
 across all structure tests.

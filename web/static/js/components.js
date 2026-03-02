@@ -32,6 +32,10 @@
  *   environment     -- exact-match filter on environment ('' = all)
  *   sortCol         -- column key currently sorted on ('hostname' default)
  *   sortDir         -- 'asc' or 'desc'
+ *   _sortCycleStage -- explicit three-state counter (0=default, 1=asc, 2=desc)
+ *                      Stage 0 is the reset/default state. Using an explicit
+ *                      counter avoids the inference bug where reset and initial
+ *                      state have the same (col, dir) output values.
  *   rows            -- array of row objects read from DOM data-* attributes
  *   _debounceTimer  -- timer handle for search debounce
  *   _critOrdinal    -- criticality -> numeric rank map for semantic sort
@@ -49,6 +53,10 @@ function AssetTableFilter(cardEl) {
     this.environment = '';
     this.sortCol = 'hostname';
     this.sortDir = 'asc';
+    // _sortCycleStage: 0 = default/reset, 1 = asc, 2 = desc.
+    // Explicit counter avoids the implicit-state-machine bug where default
+    // state has the same (col, dir) values as the post-reset state.
+    this._sortCycleStage = 0;
     this.rows = [];
     this._debounceTimer = null;
     this._critOrdinal = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -97,6 +105,8 @@ AssetTableFilter.prototype._readRows = function () {
 
 // _restoreFromUrl reads URL query params and sets component state.
 // Allows page refresh and the browser Back button to restore filter state.
+// _sortCycleStage is always reset to 0 on URL restore -- we cannot persist
+// cycle stage in the URL without clutter, and stage 0 matches "just loaded" semantics.
 AssetTableFilter.prototype._restoreFromUrl = function () {
     var params = new URLSearchParams(window.location.search);
     this.search = params.get('search') || '';
@@ -110,6 +120,7 @@ AssetTableFilter.prototype._restoreFromUrl = function () {
         this.sortCol = 'hostname';
         this.sortDir = 'asc';
     }
+    this._sortCycleStage = 0;
 };
 
 // _wireEvents attaches event listeners to all toolbar elements.
@@ -180,12 +191,14 @@ AssetTableFilter.prototype._onEnvChange = function () {
 };
 
 // _onClearFilters resets all state to defaults: clears text, dropdowns, sort.
+// _sortCycleStage resets to 0 -- default state where the cycle can restart cleanly.
 AssetTableFilter.prototype._onClearFilters = function () {
     this.search = '';
     this.criticality = '';
     this.environment = '';
     this.sortCol = 'hostname';
     this.sortDir = 'asc';
+    this._sortCycleStage = 0;
     if (this.searchInput) { this.searchInput.value = ''; }
     if (this.critSelect) { this.critSelect.value = ''; }
     if (this.envSelect) { this.envSelect.value = ''; }
@@ -304,16 +317,33 @@ AssetTableFilter.prototype._hasActiveFilters = function () {
 // Sort
 // -------------------------------------------------------------------------
 
-// toggleSort cycles: different col -> asc; same+asc -> desc; same+desc -> reset to default (hostname asc).
+// toggleSort cycles through three explicit stages via _sortCycleStage counter.
+//
+// Pattern: Explicit State Machine. The stage counter tracks cycle position
+// directly, breaking the ambiguity where the reset state has the same
+// (col, dir) output values as the initial state (both are hostname/asc).
+//
+// Stages: 0 = default/reset, 1 = asc, 2 = desc.
+// Switching to a new column always starts at stage 1 (asc).
 AssetTableFilter.prototype.toggleSort = function (col) {
     if (this.sortCol !== col) {
+        // New column: start at stage 1 (asc).
         this.sortCol = col;
         this.sortDir = 'asc';
-    } else if (this.sortDir === 'asc') {
-        this.sortDir = 'desc';
+        this._sortCycleStage = 1;
     } else {
-        this.sortCol = 'hostname';
-        this.sortDir = 'asc';
+        // Same column: advance stage with modulo-3 wrap.
+        this._sortCycleStage = (this._sortCycleStage + 1) % 3;
+        if (this._sortCycleStage === 1) {
+            this.sortCol = col;
+            this.sortDir = 'asc';
+        } else if (this._sortCycleStage === 2) {
+            this.sortDir = 'desc';
+        } else {
+            // Stage 0: reset to default (hostname asc).
+            this.sortCol = 'hostname';
+            this.sortDir = 'asc';
+        }
     }
     this.updateUrl();
     this._applyVisibility();
@@ -391,6 +421,10 @@ function VulnTableFilter(cardEl) {
     this.status = '';
     this.sortCol = 'severity';
     this.sortDir = 'desc';
+    // _sortCycleStage: 0 = default/reset, 1 = asc, 2 = desc.
+    // Explicit counter avoids the implicit-state-machine bug where clicking the
+    // default column (severity desc) immediately triggers the reset branch.
+    this._sortCycleStage = 0;
     this.rows = [];
     this._debounceTimer = null;
 
@@ -452,6 +486,8 @@ VulnTableFilter.prototype.refreshRows = function () {
 
 // _restoreFromUrl reads URL query params and sets component state.
 // Validates severity/status params against ordinal maps -- invalid values are cleared.
+// _sortCycleStage is always reset to 0 on URL restore -- we cannot persist
+// cycle stage in the URL without clutter, and stage 0 matches "just loaded" semantics.
 VulnTableFilter.prototype._restoreFromUrl = function () {
     var params = new URLSearchParams(window.location.search);
     this.search = params.get('search') || '';
@@ -470,6 +506,7 @@ VulnTableFilter.prototype._restoreFromUrl = function () {
         this.sortCol = 'severity';
         this.sortDir = 'desc';
     }
+    this._sortCycleStage = 0;
 };
 
 // _wireEvents attaches event listeners to all toolbar elements.
@@ -544,12 +581,14 @@ VulnTableFilter.prototype._onStatusChange = function () {
 };
 
 // _onClearFilters resets all state to defaults: clears text, dropdowns, sort.
+// _sortCycleStage resets to 0 -- default state where the cycle can restart cleanly.
 VulnTableFilter.prototype._onClearFilters = function () {
     this.search = '';
     this.severity = '';
     this.status = '';
     this.sortCol = 'severity';
     this.sortDir = 'desc';
+    this._sortCycleStage = 0;
     if (this.searchInput) { this.searchInput.value = ''; }
     if (this.severitySelect) { this.severitySelect.value = ''; }
     if (this.statusSelect) { this.statusSelect.value = ''; }
@@ -677,17 +716,34 @@ VulnTableFilter.prototype._hasActiveFilters = function () {
 // Sort
 // -------------------------------------------------------------------------
 
-// toggleSort cycles: different col -> asc; same+asc -> desc; same+desc -> default (severity desc).
+// toggleSort cycles through three explicit stages via _sortCycleStage counter.
+//
+// Pattern: Explicit State Machine. The stage counter tracks cycle position
+// directly, breaking the ambiguity where clicking the default column (severity
+// desc) at stage 0 would immediately match the "else" branch and reset with
+// no visible change.
+//
+// Stages: 0 = default/reset, 1 = asc, 2 = desc.
+// Switching to a new column always starts at stage 1 (asc).
 VulnTableFilter.prototype.toggleSort = function (col) {
     if (this.sortCol !== col) {
+        // New column: start at stage 1 (asc).
         this.sortCol = col;
         this.sortDir = 'asc';
-    } else if (this.sortDir === 'asc') {
-        this.sortDir = 'desc';
+        this._sortCycleStage = 1;
     } else {
-        // Reset to default: severity descending (P1/Critical first).
-        this.sortCol = 'severity';
-        this.sortDir = 'desc';
+        // Same column: advance stage with modulo-3 wrap.
+        this._sortCycleStage = (this._sortCycleStage + 1) % 3;
+        if (this._sortCycleStage === 1) {
+            this.sortCol = col;
+            this.sortDir = 'asc';
+        } else if (this._sortCycleStage === 2) {
+            this.sortDir = 'desc';
+        } else {
+            // Stage 0: reset to default (severity desc, P1/Critical first).
+            this.sortCol = 'severity';
+            this.sortDir = 'desc';
+        }
     }
     this.updateUrl();
     this._applyVisibility();
