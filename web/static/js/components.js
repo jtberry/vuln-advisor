@@ -112,9 +112,14 @@ AssetTableFilter.prototype._restoreFromUrl = function () {
     this.search = params.get('search') || '';
     this.criticality = params.get('criticality') || '';
     this.environment = params.get('environment') || '';
-    if (params.get('sort')) {
-        this.sortCol = params.get('sort');
-        this.sortDir = params.get('dir') || 'asc';
+    // Allowlist validation: sortCol is used as a dynamic property key in the
+    // sort comparator (a[col]), so we must reject arbitrary strings to prevent
+    // prototype property access via crafted URLs like ?sort=__proto__.
+    var validSortCols = { hostname: 1, environment: 1, criticality: 1 };
+    var rawSort = params.get('sort');
+    if (rawSort && validSortCols[rawSort]) {
+        this.sortCol = rawSort;
+        this.sortDir = params.get('dir') === 'desc' ? 'desc' : 'asc';
     } else {
         // Default: sort by hostname A-Z on page load.
         this.sortCol = 'hostname';
@@ -498,9 +503,14 @@ VulnTableFilter.prototype._restoreFromUrl = function () {
     var sta = params.get('status') || '';
     this.status = (sta && this._statusOrdinal[sta] !== undefined) ? sta : '';
 
-    if (params.get('sort')) {
-        this.sortCol = params.get('sort');
-        this.sortDir = params.get('dir') || 'asc';
+    // Allowlist validation: sortCol is used as a dynamic property key in the
+    // sort comparator (a[col]), so we must reject arbitrary strings to prevent
+    // prototype property access via crafted URLs like ?sort=constructor.
+    var validSortCols = { cve: 1, severity: 1, cvss: 1, status: 1 };
+    var rawSort = params.get('sort');
+    if (rawSort && validSortCols[rawSort]) {
+        this.sortCol = rawSort;
+        this.sortDir = params.get('dir') === 'desc' ? 'desc' : 'asc';
     } else {
         // Default: sort by severity descending (P1/Critical first) on page load.
         this.sortCol = 'severity';
