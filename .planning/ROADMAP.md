@@ -19,7 +19,7 @@
 **Milestone Goal:** Make existing data explorable and extractable. Clean v1.0 debt, add client-side interactivity for search/filter/sort on asset and CVE tables, fix API key management page, and deliver CSV export.
 
 - [x] **Phase 11: Foundation & Alpine Setup** - Clear v1.0 audit debt and wire Alpine.js globally (completed 2026-02-27)
-- [x] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (replanned: vanilla JS replacing Alpine.js) (completed 2026-03-02)
+- [x] **Phase 12: Search, Filter, and Sort** - Interactive search and filter on asset and vulnerability tables (replanned: vanilla JS replacing Alpine.js) (UAT gap closure in progress) (completed 2026-03-02)
 - [ ] **Phase 13: API Key Management** - Working web page to list, create, and revoke API keys
 - [ ] **Phase 14: CSV Export** - Downloadable filtered asset and vulnerability data
 
@@ -49,9 +49,10 @@
   3. User can click any column header on the asset table to sort ascending or descending
   4. User can search and filter the vulnerability table on an asset detail page by CVE ID, description, severity, and status
   5. Sharing the page URL with active filters reproduces the same filtered view in a new browser tab
-**Plans**: 2 plans
+**Plans**: 3 plans
 - [ ] 12-01-PLAN.md -- Asset table vanilla JS filter/sort, Alpine CDN removal, test updates (SRCH-01 through SRCH-04, SRCH-09)
 - [ ] 12-02-PLAN.md -- Vuln table vanilla JS filter/sort, HTMX bridge, checkbox fix, test updates (SRCH-05 through SRCH-09)
+- [ ] 12-03-PLAN.md -- Gap closure: fix three-state sort cycle bug on default columns (SRCH-03, SRCH-07)
 
 ### Phase 13: API Key Management
 **Goal**: Users can manage their API keys from the web UI without using the REST API directly, and the dead nav link is permanently fixed
@@ -82,6 +83,6 @@ Note: Phases 12 and 13 are independent of each other and can be implemented in p
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 11. Foundation & Alpine Setup | 2/2 | Complete    | 2026-02-27 | - |
-| 12. Search, Filter, and Sort | 2/2 | Complete   | 2026-03-02 | - |
+| 12. Search, Filter, and Sort | 3/3 | Complete   | 2026-03-02 | - |
 | 13. API Key Management | v1.1 | 0/? | Not started | - |
 | 14. CSV Export | v1.1 | 0/? | Not started | - |

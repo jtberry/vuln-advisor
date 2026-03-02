@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Searchable & Exportable
 status: unknown
-last_updated: "2026-03-02T00:05:01.598Z"
+last_updated: "2026-03-02T00:32:52.142Z"
 progress:
   total_phases: 12
   completed_phases: 11
-  total_plans: 34
-  completed_plans: 33
+  total_plans: 35
+  completed_plans: 34
 ---
 
 # VulnAdvisor - State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-02-27)
 ## Current Position
 
 Phase: 12 of 14 (Search, Filter, and Sort)
-Plan: 2 of 2 completed
+Plan: 3 of 3 completed
 Status: Active
-Last activity: 2026-02-28 - Phase 12 Plan 02 complete (vulnTable Alpine component + asset_detail.html toolbar wired)
+Last activity: 2026-03-02 - Phase 12 Plan 03 complete (three-state sort cycle bug fix via _sortCycleStage counter)
 
-Progress: [##########] Plan 2/2 (Phase 12 COMPLETE)
+Progress: [##########] Plan 3/3 (Phase 12 COMPLETE)
 
 ## Performance Metrics
 
@@ -49,6 +49,7 @@ Progress: [##########] Plan 2/2 (Phase 12 COMPLETE)
 | Phase 12-search-filter-and-sort P02 | 35min | 2 tasks | 4 files |
 | Phase 12-search-filter-and-sort P01 | 25 | 2 tasks | 4 files |
 | Phase 12-search-filter-and-sort P02 | 35min | 2 tasks | 4 files |
+| Phase 12-search-filter-and-sort P03 | 15min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,7 @@ Recent decisions affecting current work:
 - [Phase 12-search-filter-and-sort]: Prototype-based class pattern used for AssetTableFilter (function + .prototype) -- consistent with var self closure pattern and broad browser compatibility
 - [Phase 12-search-filter-and-sort]: VulnTableFilter anchors on id=vuln-table-card (outer card div) not tbody -- HTMX hx-swap=innerHTML targets tbody; outer-card pattern keeps component alive during HTMX swaps
 - [Phase 12-search-filter-and-sort]: Alpine CDN fully removed (Plan 01); test_csp_alpine.py Alpine assertions updated to reflect vanilla JS architecture (no Alpine CDN, components.js nonce check)
+- [Phase 12-search-filter-and-sort]: Explicit _sortCycleStage counter (0=default, 1=asc, 2=desc) instead of inferring cycle from (col, dir) pair -- resolves ambiguity where reset state equals initial state on default column
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-01
-Stopped at: Completed 12-02-PLAN.md -- VulnTableFilter vanilla JS class + asset_detail.html vuln card rewrite (Phase 12 Plan 02, Phase 12 COMPLETE)
+Last session: 2026-03-02
+Stopped at: Completed 12-03-PLAN.md -- three-state sort cycle bug fix in AssetTableFilter and VulnTableFilter (Phase 12 Plan 03, Phase 12 COMPLETE)
 Resume file: None
