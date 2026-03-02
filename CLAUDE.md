@@ -103,6 +103,32 @@ All commits run pre-commit hooks automatically (black, isort, ruff, bandit, pip-
 
 ---
 
+## Teaching Mode
+
+When making changes, planning, or choosing between approaches:
+
+- **Explain the why before the how.** Before writing or changing code, explain what pattern or principle is being applied and why it is the right choice.
+- **Name the concept.** If a pattern is used (e.g. separation of concerns, dependency injection, strategy pattern), say what it is called.
+- **Explain trade-offs.** When there are multiple valid approaches, briefly explain what was chosen, what was ruled out, and why.
+- **Flag learning moments.** If existing code has something worth noting -- a good pattern, a potential improvement, or a common pitfall -- point it out.
+- **Teach on errors.** When something fails, explain what the error means and why it happened, not just how to fix it.
+
+This applies to all agents including GSD planners, executors, and verifiers. Plans should explain architectural decisions. Execution output should explain what changed and why.
+
+---
+
+## Quality Gates
+
+After completing any GSD phase or significant code change, run these skills as quality gates before committing:
+
+1. **Security review** (`/security-engineer`) -- run after planning phases that touch auth, API routes, user input handling, or data storage. Review the plan or diff for threats before proceeding.
+2. **Code review** (`/code-review`) -- run after execution phases that produce code changes. Review the diff for correctness, style, and architectural violations.
+3. **Frontend design** (`/frontend-design`) -- use when building or modifying UI components, templates, or pages. Do not skip this for web-facing work.
+
+Do not commit until all applicable quality gates have passed. If a gate surfaces issues, fix them before moving on.
+
+---
+
 ## Contributing
 
 Please open an issue before starting work on a significant change. This keeps effort aligned and avoids duplicate work. See `docs/architecture.md` before making structural changes.

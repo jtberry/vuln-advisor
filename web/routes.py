@@ -109,6 +109,11 @@ templates.env.globals["try_get_current_user"] = try_get_current_user
 # requiring every route handler to pass providers in the context dict.
 # get_enabled_providers() reads only from Settings (no request context needed).
 templates.env.globals["get_enabled_providers"] = get_enabled_providers
+# Expose csp_nonce as a Jinja2 global so layout.html can call csp_nonce(request)
+# to retrieve the per-request nonce set by csp_nonce_middleware in api/main.py.
+# Returns "" when request.state.csp_nonce is not set (e.g. in unit tests that
+# do not run through the middleware stack).
+templates.env.globals["csp_nonce"] = lambda request: getattr(request.state, "csp_nonce", "")
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
@@ -369,8 +374,10 @@ def dashboard(request: Request, page: int = 1) -> HTMLResponse:
         # .get() safe default: assets with zero open vulns are omitted from the bulk count map
         counts = all_asset_counts.get(asset.id, {"P1": 0, "P2": 0, "P3": 0, "P4": 0})
 
-        # Nearest open deadline per asset (still a per-asset query, but this is a display-only
-        # detail not covered by the bulk count query and only used for the risk table column)
+        # TECH-DEBT: N+1 query -- fetches all vulns per asset to find nearest deadline.
+        # Acceptable at solo-analyst scale (~50 assets). Replace with a bulk MIN(deadline)
+        # query grouped by asset_id before supporting team-scale deployments (100+ assets).
+        # Not covered by the bulk priority-count query above (different column, different filter).
         vulns = cmdb.get_asset_vulns(asset.id)
         nearest_deadline: Optional[str] = None
         for v in vulns:
@@ -900,9 +907,14 @@ async def update_vuln_status_htmx(
     asset_id: int,
     cve_id: str,
     status: str = Form(...),
+    from_status: Optional[str] = Form(default=None),
     owner: Optional[str] = Form(default=None),
     evidence: Optional[str] = Form(default=None),
 ) -> HTMLResponse:
+    # from_status: documents the status the user transitioned FROM.
+    # Not yet used for conflict detection -- captured for regression analysis.
+    # Future: compare from_status to current DB status; reject stale updates.
+    _ = from_status  # Captured for future conflict detection (DEBT-06)
     cmdb: CMDBStore = request.app.state.cmdb
     normalized = cve_id.upper()
 
@@ -1898,3 +1910,24 @@ async def admin_settings_post(
     else:
         request.session["flash"] = "Unknown action."
         return RedirectResponse("/admin/settings", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# GET /account/api-keys -- API key management placeholder (DEBT-05)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/account/api-keys", response_class=HTMLResponse)
+def api_keys_page(request: Request) -> HTMLResponse:
+    """Render the API key management placeholder page.
+
+    Phase 13 replaces this with the full management UI (create/view/revoke).
+    Locked decision: use /account/api-keys prefix to group account-related
+    pages and make auth middleware easier to apply to a path prefix later.
+    """
+    if redirect := _require_auth(request):
+        return redirect
+    return templates.TemplateResponse(
+        "api_keys.html",
+        {"request": request},
+    )

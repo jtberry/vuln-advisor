@@ -23,7 +23,13 @@
   'deferred':    'bg-warning text-dark',
 } %}
 
-<tr id="row-{{ vuln.cve_id }}" data-cve="{{ vuln.cve_id }}">
+<tr id="row-{{ vuln.cve_id }}"
+    data-row
+    data-cve="{{ vuln.cve_id | lower }}"
+    data-description="{{ (enriched.description if enriched and enriched.description else '') | lower | truncate(200, end='') }}"
+    data-severity="{{ vuln.effective_priority | lower }}"
+    data-cvss="{{ enriched.cvss.score if enriched and enriched.cvss and enriched.cvss.score is not none else '0' }}"
+    data-status="{{ vuln.status }}">
 
   {# Checkbox -- first column for bulk selection #}
   <td class="text-center" style="width: 32px; padding-left: 0.75rem">
