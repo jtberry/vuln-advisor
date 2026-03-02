@@ -363,15 +363,393 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /*
- * VulnTableFilter -- will be added in Plan 02.
- * Plan 02 adds a vanilla JS class following the same pattern as AssetTableFilter.
+ * VulnTableFilter -- client-side search, filter, sort for the vulnerability
+ * table on the asset detail page. Replaces the previous Alpine.js vulnTable
+ * component.
+ *
+ * Architecture: The component anchors on the outer vulnerability card div
+ * (id="vuln-table-card"), NOT on the tbody. HTMX targets #vuln-table-body
+ * for innerHTML swap. If JS owned the tbody, HTMX's replacement would orphan
+ * the component's DOM references. The outer-card anchor keeps the component
+ * alive during HTMX swaps.
+ *
+ * After HTMX swaps new rows, the htmx:afterSwap listener calls refreshRows()
+ * to re-read the updated DOM.
+ *
+ * Checkbox coexistence: The vanilla JS checkbox code filters hidden rows via
+ * cb.closest('tr').style.display !== 'none'. This component does NOT own the
+ * checkboxes.
+ *
+ * Scale constraint: client-side filtering targets < ~500 vulnerabilities.
  */
+function VulnTableFilter(cardEl) {
+    this.cardEl = cardEl;
+
+    // State
+    this.search = '';
+    this.severity = '';
+    this.status = '';
+    this.sortCol = 'severity';
+    this.sortDir = 'desc';
+    this.rows = [];
+    this._debounceTimer = null;
+
+    // Semantic ordinals for severity sort (lower ordinal = higher priority).
+    // Supports both priority labels (p1-p4) and CVSS-style labels (critical/high/medium/low).
+    this._severityOrdinal = { p1: 0, p2: 1, p3: 2, p4: 3, critical: 0, high: 1, medium: 2, low: 3 };
+
+    // Semantic ordinals for status sort.
+    this._statusOrdinal = { open: 0, in_review: 1, remediated: 2, deferred: 3, closed: 4 };
+
+    // DOM element references (by id -- matching ids set in asset_detail.html)
+    this.searchInput = document.getElementById('vuln-search-input');
+    this.clearSearchBtn = document.getElementById('vuln-clear-search');
+    this.countLabel = document.getElementById('vuln-count-label');
+    this.severitySelect = document.getElementById('vuln-severity-select');
+    this.statusSelect = document.getElementById('vuln-status-select');
+    this.clearFiltersLink = document.getElementById('vuln-clear-filters');
+    this.noResultsRow = document.getElementById('vuln-no-results');
+    this.noResultsClearLink = document.getElementById('vuln-no-results-clear');
+
+    // Read rows from DOM, restore state from URL, sync inputs, wire events
+    this._readRows();
+    this._restoreFromUrl();
+
+    // Sync DOM inputs to restored URL state
+    if (this.searchInput) { this.searchInput.value = this.search; }
+    if (this.severitySelect) { this.severitySelect.value = this.severity; }
+    if (this.statusSelect) { this.statusSelect.value = this.status; }
+
+    this._wireEvents();
+    this._applyVisibility();
+}
+
+// _readRows scans tbody for tr[data-row] elements (excludes data-empty-state row)
+// and maps each to a plain object. Text fields are lowercased at read time to
+// avoid repeated .toLowerCase() calls in _applyVisibility on every keypress.
+VulnTableFilter.prototype._readRows = function () {
+    var tbody = this.cardEl.querySelector('tbody');
+    if (!tbody) { return; }
+    this.rows = Array.from(tbody.querySelectorAll('tr[data-row]')).map(function (tr) {
+        return {
+            el: tr,
+            cve: (tr.dataset.cve || '').toLowerCase(),
+            description: (tr.dataset.description || '').toLowerCase(),
+            severity: (tr.dataset.severity || ''),
+            cvss: parseFloat(tr.dataset.cvss || '0'),
+            status: (tr.dataset.status || ''),
+        };
+    });
+};
+
+// refreshRows is called by the HTMX afterSwap bridge after #vuln-table-body
+// innerHTML is replaced. It re-reads the live DOM and re-applies the current
+// filter/sort state so newly-added rows are included.
+VulnTableFilter.prototype.refreshRows = function () {
+    this._readRows();
+    this._applyVisibility();
+};
+
+// _restoreFromUrl reads URL query params and sets component state.
+// Validates severity/status params against ordinal maps -- invalid values are cleared.
+VulnTableFilter.prototype._restoreFromUrl = function () {
+    var params = new URLSearchParams(window.location.search);
+    this.search = params.get('search') || '';
+
+    var sev = params.get('severity') || '';
+    this.severity = (sev && this._severityOrdinal[sev] !== undefined) ? sev : '';
+
+    var sta = params.get('status') || '';
+    this.status = (sta && this._statusOrdinal[sta] !== undefined) ? sta : '';
+
+    if (params.get('sort')) {
+        this.sortCol = params.get('sort');
+        this.sortDir = params.get('dir') || 'asc';
+    } else {
+        // Default: sort by severity descending (P1/Critical first) on page load.
+        this.sortCol = 'severity';
+        this.sortDir = 'desc';
+    }
+};
+
+// _wireEvents attaches event listeners to all toolbar elements.
+// Uses var self pattern (not arrow functions) for broad browser compatibility.
+VulnTableFilter.prototype._wireEvents = function () {
+    var self = this;
+    if (self.searchInput) {
+        self.searchInput.addEventListener('input', function () { self._onSearchInput(); });
+    }
+    if (self.clearSearchBtn) {
+        self.clearSearchBtn.addEventListener('click', function () { self._onClearSearch(); });
+    }
+    if (self.severitySelect) {
+        self.severitySelect.addEventListener('change', function () { self._onSeverityChange(); });
+    }
+    if (self.statusSelect) {
+        self.statusSelect.addEventListener('change', function () { self._onStatusChange(); });
+    }
+    if (self.clearFiltersLink) {
+        self.clearFiltersLink.addEventListener('click', function () { self._onClearFilters(); });
+    }
+    if (self.noResultsClearLink) {
+        self.noResultsClearLink.addEventListener('click', function () { self._onClearFilters(); });
+    }
+
+    // Sort header click handlers -- each th has an id matching sort-{col}
+    var sortCve = document.getElementById('sort-cve');
+    if (sortCve) {
+        sortCve.addEventListener('click', function () { self.toggleSort('cve'); });
+    }
+    var sortSeverity = document.getElementById('sort-severity');
+    if (sortSeverity) {
+        sortSeverity.addEventListener('click', function () { self.toggleSort('severity'); });
+    }
+    var sortCvss = document.getElementById('sort-cvss');
+    if (sortCvss) {
+        sortCvss.addEventListener('click', function () { self.toggleSort('cvss'); });
+    }
+    var sortStatus = document.getElementById('sort-status');
+    if (sortStatus) {
+        sortStatus.addEventListener('click', function () { self.toggleSort('status'); });
+    }
+};
+
+// -------------------------------------------------------------------------
+// Input handlers
+// -------------------------------------------------------------------------
+
+VulnTableFilter.prototype._onSearchInput = function () {
+    this.search = this.searchInput.value;
+    this._scheduleUrlUpdate();
+    this._applyVisibility();
+};
+
+VulnTableFilter.prototype._onClearSearch = function () {
+    this.search = '';
+    this.searchInput.value = '';
+    this.updateUrl();
+    this._applyVisibility();
+};
+
+VulnTableFilter.prototype._onSeverityChange = function () {
+    this.severity = this.severitySelect.value;
+    this.updateUrl();
+    this._applyVisibility();
+};
+
+VulnTableFilter.prototype._onStatusChange = function () {
+    this.status = this.statusSelect.value;
+    this.updateUrl();
+    this._applyVisibility();
+};
+
+// _onClearFilters resets all state to defaults: clears text, dropdowns, sort.
+VulnTableFilter.prototype._onClearFilters = function () {
+    this.search = '';
+    this.severity = '';
+    this.status = '';
+    this.sortCol = 'severity';
+    this.sortDir = 'desc';
+    if (this.searchInput) { this.searchInput.value = ''; }
+    if (this.severitySelect) { this.severitySelect.value = ''; }
+    if (this.statusSelect) { this.statusSelect.value = ''; }
+    this.updateUrl();
+    this._applyVisibility();
+};
+
+// -------------------------------------------------------------------------
+// Core filter + sort engine
+// -------------------------------------------------------------------------
+
+VulnTableFilter.prototype._applyVisibility = function () {
+    var self = this;
+    var q = self.search.toLowerCase();
+
+    // Step 1: build the filtered subset.
+    var visible = self.rows.filter(function (r) {
+        // Text search: substring match on cve + description (pre-lowercased).
+        if (q && r.cve.indexOf(q) === -1 && r.description.indexOf(q) === -1) {
+            return false;
+        }
+        // Exact severity filter.
+        if (self.severity && r.severity !== self.severity) {
+            return false;
+        }
+        // Exact status filter.
+        if (self.status && r.status !== self.status) {
+            return false;
+        }
+        return true;
+    });
+
+    // Step 2: sort the filtered subset.
+    var col = self.sortCol;
+    var dir = self.sortDir === 'asc' ? 1 : -1;
+    var sevOrd = self._severityOrdinal;
+    var staOrd = self._statusOrdinal;
+    visible.sort(function (a, b) {
+        var av, bv;
+        if (col === 'severity') {
+            // Semantic sort: ordinal map, unknown values rank last (99).
+            av = sevOrd[a.severity] !== undefined ? sevOrd[a.severity] : 99;
+            bv = sevOrd[b.severity] !== undefined ? sevOrd[b.severity] : 99;
+            return dir * (av - bv);
+        }
+        if (col === 'status') {
+            // Semantic sort: ordinal map, unknown values rank last (99).
+            av = staOrd[a.status] !== undefined ? staOrd[a.status] : 99;
+            bv = staOrd[b.status] !== undefined ? staOrd[b.status] : 99;
+            return dir * (av - bv);
+        }
+        if (col === 'cvss') {
+            // Numeric sort on parsed float (parseFloat done at _readRows time).
+            return dir * (a.cvss - b.cvss);
+        }
+        // String sort for cve (already lowercased).
+        av = a[col] || '';
+        bv = b[col] || '';
+        if (av < bv) { return -1 * dir; }
+        if (av > bv) { return 1 * dir; }
+        return 0;
+    });
+
+    // Step 3: hide all rows, then show and reorder the visible set.
+    // DOM reorder via appendChild moves existing nodes -- no clone needed.
+    var tbody = self.cardEl.querySelector('tbody');
+    for (var i = 0; i < self.rows.length; i++) {
+        self.rows[i].el.style.display = 'none';
+    }
+    for (var j = 0; j < visible.length; j++) {
+        visible[j].el.style.display = '';
+        tbody.appendChild(visible[j].el);
+    }
+
+    // Step 4: update sort indicator arrows (imperative, CSP-safe).
+    self._updateSortIndicators();
+
+    // Step 5: update UI state (counts, button visibility).
+    self._updateUiState(visible.length);
+};
+
+// _updateSortIndicators manages sort arrow visibility imperatively.
+// Each indicator span carries data-sort-col and data-sort-type attributes.
+VulnTableFilter.prototype._updateSortIndicators = function () {
+    var indicators = this.cardEl.querySelectorAll('[data-sort-type]');
+    for (var i = 0; i < indicators.length; i++) {
+        var col = indicators[i].dataset.sortCol;
+        var type = indicators[i].dataset.sortType;
+        var show = false;
+        if (type === 'inactive') {
+            show = col !== this.sortCol;
+        } else if (type === 'asc') {
+            show = col === this.sortCol && this.sortDir === 'asc';
+        } else if (type === 'desc') {
+            show = col === this.sortCol && this.sortDir !== 'asc';
+        }
+        indicators[i].style.display = show ? '' : 'none';
+    }
+};
+
+// _updateUiState refreshes count label, clear button visibility, and no-results row.
+VulnTableFilter.prototype._updateUiState = function (matchCount) {
+    var totalCount = this.rows.length;
+    if (this.countLabel) {
+        this.countLabel.textContent = matchCount + ' of ' + totalCount + ' vulnerabilities';
+    }
+    if (this.clearSearchBtn) {
+        this.clearSearchBtn.style.display = this.search ? '' : 'none';
+    }
+    if (this.clearFiltersLink) {
+        this.clearFiltersLink.style.display = this._hasActiveFilters() ? '' : 'none';
+    }
+    if (this.noResultsRow) {
+        this.noResultsRow.style.display = (matchCount === 0 && totalCount > 0) ? '' : 'none';
+    }
+};
+
+// _hasActiveFilters returns true when any filter or sort differs from the default state.
+VulnTableFilter.prototype._hasActiveFilters = function () {
+    return this.search !== '' || this.severity !== '' || this.status !== '' ||
+        this.sortCol !== 'severity' || this.sortDir !== 'desc';
+};
+
+// -------------------------------------------------------------------------
+// Sort
+// -------------------------------------------------------------------------
+
+// toggleSort cycles: different col -> asc; same+asc -> desc; same+desc -> default (severity desc).
+VulnTableFilter.prototype.toggleSort = function (col) {
+    if (this.sortCol !== col) {
+        this.sortCol = col;
+        this.sortDir = 'asc';
+    } else if (this.sortDir === 'asc') {
+        this.sortDir = 'desc';
+    } else {
+        // Reset to default: severity descending (P1/Critical first).
+        this.sortCol = 'severity';
+        this.sortDir = 'desc';
+    }
+    this.updateUrl();
+    this._applyVisibility();
+};
+
+// -------------------------------------------------------------------------
+// URL sync
+// -------------------------------------------------------------------------
+
+// _scheduleUrlUpdate debounces URL sync for the search input (300ms).
+VulnTableFilter.prototype._scheduleUrlUpdate = function () {
+    var self = this;
+    clearTimeout(self._debounceTimer);
+    self._debounceTimer = setTimeout(function () {
+        self.updateUrl();
+    }, 300);
+};
+
+// updateUrl mirrors current filter/sort state to the URL query string.
+// Uses history.replaceState (no page reload, no new history entry).
+// Omits sort/dir when state matches the default (severity desc) to keep URLs clean.
+VulnTableFilter.prototype.updateUrl = function () {
+    var params = new URLSearchParams(window.location.search);
+    if (this.search) { params.set('search', this.search); } else { params.delete('search'); }
+    if (this.severity) { params.set('severity', this.severity); } else { params.delete('severity'); }
+    if (this.status) { params.set('status', this.status); } else { params.delete('status'); }
+    // Omit sort/dir when state matches the default (severity desc).
+    if (this.sortCol && !(this.sortCol === 'severity' && this.sortDir === 'desc')) {
+        params.set('sort', this.sortCol);
+        params.set('dir', this.sortDir);
+    } else {
+        params.delete('sort');
+        params.delete('dir');
+    }
+    var qs = params.toString();
+    history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
+};
+
+// Self-initialize on DOMContentLoaded if the card element is present.
+// Stores the instance on window so the HTMX bridge can call refreshRows() on it.
+document.addEventListener('DOMContentLoaded', function () {
+    var card = document.getElementById('vuln-table-card');
+    if (card) {
+        window._vulnTableFilter = new VulnTableFilter(card);
+    }
+});
 
 /*
- * HTMX afterSwap bridge -- placeholder for Plan 02's VulnTableFilter.
- * When VulnTableFilter is added, this listener will call refreshRows()
- * on the component when HTMX swaps #vuln-table-body.
+ * HTMX afterSwap bridge -- re-read vuln rows after HTMX swaps #vuln-table-body.
+ *
+ * When the add-CVE form submits, HTMX replaces #vuln-table-body innerHTML.
+ * The VulnTableFilter's this.rows array still points at old (detached) <tr>
+ * elements. This listener calls refreshRows() to re-scan the live DOM and
+ * re-apply the current filter/sort state to include newly added rows.
+ *
+ * Simpler than the Alpine version -- no _x_dataStack lookup needed.
+ * The window global reference is direct and explicit.
  */
 document.addEventListener('htmx:afterSwap', function (event) {
-    // Plan 02 will add: if target is vuln-table-body, call refreshRows()
+    if (event.detail.target && event.detail.target.id === 'vuln-table-body') {
+        if (window._vulnTableFilter && window._vulnTableFilter.refreshRows) {
+            window._vulnTableFilter.refreshRows();
+        }
+    }
 });

@@ -1,13 +1,16 @@
 """
-tests/test_phase11_csp_alpine.py -- Integration tests for Phase 11 Plan 01.
+tests/test_csp_alpine.py -- Integration tests for CSP nonce middleware and vanilla JS setup.
 
 Covers:
   - CSP nonce middleware generates a per-request nonce in the response header
   - All script/style tags in layout.html carry the nonce attribute
   - The nonce value in the HTML matches the value in the CSP header
-  - Alpine.js CSP build CDN tag is present in the HTML
-  - components.js is referenced in the HTML
+  - components.js (vanilla JS, no Alpine) is referenced in the HTML
   - CSP header contains no unsafe-inline or unsafe-eval directives
+
+Note: Alpine.js CDN was removed in Phase 12 Plan 01. All interactive UI is now
+implemented with vanilla JS (AssetTableFilter, VulnTableFilter in components.js).
+These tests were updated to reflect the vanilla JS architecture.
 
 These tests use the /login page (no auth required) since it renders layout.html.
 The web_client fixture provides a TestClient with follow_redirects=False and a
@@ -72,45 +75,45 @@ def test_csp_nonce_matches_header(web_client):
 
 
 # ---------------------------------------------------------------------------
-# Alpine.js CDN tests
+# Vanilla JS / components.js tests
 # ---------------------------------------------------------------------------
 
 
-def test_alpine_cdn_in_layout(web_client):
-    """Alpine.js CSP build CDN script tag is present on every page."""
+def test_no_alpine_cdn_in_layout(web_client):
+    """Alpine.js CDN must NOT be present -- it was removed in Phase 12 Plan 01.
+
+    All interactive UI now uses vanilla JS (AssetTableFilter, VulnTableFilter).
+    Alpine requires unsafe-eval in CSP; vanilla JS does not.
+    """
     client, _token = web_client
     resp = _get_login_response(client)
     assert resp.status_code == 200
-    # The @alpinejs/csp package (not alpinejs) must be used -- the CSP build
-    # is required because our policy forbids unsafe-eval.
-    assert "@alpinejs/csp" in resp.text, (
-        "Alpine.js CSP build CDN URL not found in HTML. "
-        "The standard alpinejs build would violate CSP (uses Function())."
+    assert "alpinejs" not in resp.text, (
+        "Alpine.js CDN found in HTML. Alpine was removed in Phase 12 Plan 01 -- "
+        "all interactive UI uses vanilla JS components.js instead."
     )
 
 
 def test_components_js_loaded(web_client):
-    """components.js is referenced in the layout so Alpine.data() components load."""
+    """components.js is referenced in the layout so vanilla JS components load."""
     client, _token = web_client
     resp = _get_login_response(client)
     assert resp.status_code == 200
     assert "/static/js/components.js" in resp.text, "/static/js/components.js script tag not found in HTML"
 
 
-def test_alpine_scripts_have_nonce(web_client):
-    """Alpine CDN and components.js script tags carry a nonce attribute."""
+def test_components_js_has_nonce(web_client):
+    """components.js script tag carries a nonce attribute (required by CSP)."""
     client, _token = web_client
     resp = _get_login_response(client)
     assert resp.status_code == 200
     body = resp.text
-    # Both Alpine script tags must have a nonce (otherwise CSP will block them)
-    assert "@alpinejs/csp" in body, "Alpine CDN tag missing"
-    # Find the Alpine script tag and check it has a nonce
-    alpine_tag_match = re.search(r"<script[^>]*@alpinejs/csp[^>]*>", body)
-    assert alpine_tag_match, "Could not find Alpine CDN script tag"
-    assert 'nonce="' in alpine_tag_match.group(
+    # Find the components.js script tag and check it has a nonce
+    components_tag_match = re.search(r"<script[^>]*components\.js[^>]*>", body)
+    assert components_tag_match, "Could not find components.js script tag in HTML"
+    assert 'nonce="' in components_tag_match.group(
         0
-    ), f"Alpine CDN script tag is missing nonce attribute: {alpine_tag_match.group(0)}"
+    ), f"components.js script tag is missing nonce attribute: {components_tag_match.group(0)}"
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +131,9 @@ def test_no_unsafe_inline_in_csp(web_client):
 
 
 def test_no_unsafe_eval_in_csp(web_client):
-    """CSP header must not contain unsafe-eval (Alpine CSP build avoids Function())."""
+    """CSP header must not contain unsafe-eval (vanilla JS has no eval requirement)."""
     client, _token = web_client
     resp = _get_login_response(client)
     csp = resp.headers.get("Content-Security-Policy-Report-Only", "")
     assert csp, "CSP header missing"
-    assert "unsafe-eval" not in csp, f"CSP header contains unsafe-eval -- @alpinejs/csp build avoids this: {csp}"
+    assert "unsafe-eval" not in csp, f"CSP header contains unsafe-eval -- vanilla JS components.js avoids eval: {csp}"

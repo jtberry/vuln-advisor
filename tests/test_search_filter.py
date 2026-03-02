@@ -1,7 +1,9 @@
 """
 tests/test_search_filter.py -- Integration tests for search, filter, and sort.
 
-Covers the vanilla JS AssetTableFilter wiring on assets_list.html:
+Covers both vanilla JS components in components.js:
+
+AssetTableFilter wiring on assets_list.html:
   - data-* attributes on <tr> rows (hostname, ip, name, criticality, environment)
   - id="asset-table-card" on the card wrapper div (JS mount point)
   - Search input with id="asset-search-input" (components.js wires addEventListener)
@@ -9,13 +11,20 @@ Covers the vanilla JS AssetTableFilter wiring on assets_list.html:
   - Sortable column headers with id="sort-*" attributes
   - Result count span with id="asset-count-label" (JS sets textContent)
 
+VulnTableFilter wiring on asset_detail.html:
+  - data-* attributes on vuln <tr> rows (cve, description, severity, cvss, status)
+  - id="vuln-table-card" on the outer card div (JS mount point)
+  - Search input with id="vuln-search-input"
+  - Severity and status filter dropdowns with id-based wiring
+  - Sortable column headers with id="sort-cve/severity/cvss/status" attributes
+
 These tests verify server-rendered HTML structure only (no headless browser).
 JavaScript behavior is tested manually via the browser. ID attribute presence
 is a sufficient proxy for correct vanilla JS wiring.
 
 Fixture design: module-scoped for performance. One asset is created via the
-API before the test module runs, then the /assets page is fetched once and
-reused across all structure tests.
+API before the test module runs, then the page is fetched once and reused
+across all structure tests.
 """
 
 from __future__ import annotations
@@ -264,37 +273,39 @@ def test_vuln_row_cvss_attr(asset_detail_page: tuple[str, int]) -> None:
 
 
 def test_vuln_table_sort_headers(asset_detail_page: tuple[str, int]) -> None:
-    """Vuln table has per-column sort headers (Plan 02 will wire these with vanilla JS ids)."""
+    """Vuln table has per-column sort headers wired with vanilla JS id attributes."""
     html, _asset_id = asset_detail_page
-    for method in ("sortByCve", "sortBySeverity", "sortByCvss", "sortByStatus"):
-        assert method in html, (
-            f"{method} not found in HTML. " f'Sortable headers need @click="{method}" (CSP-safe per-column handler).'
+    for sort_id in ("sort-cve", "sort-severity", "sort-cvss", "sort-status"):
+        assert 'id="' + sort_id + '"' in html, (
+            f'id="{sort_id}" not found in HTML. '
+            f"Sortable headers need id attributes for VulnTableFilter addEventListener wiring."
         )
 
 
-def test_alpine_xdata_wrapper_vulns(asset_detail_page: tuple[str, int]) -> None:
-    """The outer vulnerability card div has x-data=\"vulnTable\" to mount the Alpine component."""
+def test_vanilla_wrapper_vulns(asset_detail_page: tuple[str, int]) -> None:
+    """The outer vulnerability card div has id=\"vuln-table-card\" as the JS mount point."""
     html, _asset_id = asset_detail_page
-    assert 'x-data="vulnTable"' in html, (
-        'x-data="vulnTable" not found on the vulnerability card wrapper. '
-        "Alpine will not initialize the component without this attribute."
+    assert 'id="vuln-table-card"' in html, (
+        'id="vuln-table-card" not found on the vulnerability card wrapper. '
+        "VulnTableFilter constructor looks up this element via getElementById."
     )
 
 
 def test_vuln_search_input(asset_detail_page: tuple[str, int]) -> None:
-    """Search input with x-ref and @input=\"setSearch\" exists in the vuln card."""
+    """Search input with id=\"vuln-search-input\" exists in the vuln card."""
     html, _asset_id = asset_detail_page
-    assert 'x-ref="searchInput"' in html, (
-        'x-ref="searchInput" not found on vuln search input. '
-        "Alpine CSP uses $refs instead of event.target.value to read inputs."
+    assert 'id="vuln-search-input"' in html, (
+        'id="vuln-search-input" not found on vuln search input. '
+        "VulnTableFilter wires input listener via getElementById('vuln-search-input')."
     )
-    assert (
-        '@input="setSearch"' in html or "@input='setSearch'" in html
-    ), '@input="setSearch" handler not found on vuln search input.'
 
 
 def test_vuln_filter_dropdowns(asset_detail_page: tuple[str, int]) -> None:
-    """Severity and status select dropdowns exist with @change handlers."""
+    """Severity and status select dropdowns exist with id attributes for vanilla JS wiring."""
     html, _asset_id = asset_detail_page
-    assert "setSeverity" in html, 'setSeverity handler not found. Severity dropdown needs @change="setSeverity".'
-    assert "setStatus" in html, 'setStatus handler not found. Status dropdown needs @change="setStatus".'
+    assert (
+        'id="vuln-severity-select"' in html
+    ), 'id="vuln-severity-select" not found. Severity dropdown needs this id for VulnTableFilter wiring.'
+    assert (
+        'id="vuln-status-select"' in html
+    ), 'id="vuln-status-select" not found. Status dropdown needs this id for VulnTableFilter wiring.'
