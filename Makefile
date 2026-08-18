@@ -57,7 +57,12 @@ security: ## Run security checks (bandit + pip-audit + semgrep)
 	semgrep scan --config "p/python" --config "p/fastapi" --error --quiet .
 
 smoke: ## Verify all modules import cleanly
-	$(PYTHON) -c "from core.enricher import enrich; \
+	# DEBUG=true is required, not optional: auth.tokens and web.routes call
+	# get_settings() at import time, which raises without a >=32 char SECRET_KEY.
+	# This target only checks that modules import, so dev mode is the right
+	# context -- without it `make smoke` and `make check` fail for any
+	# contributor who has not yet created a .env.
+	DEBUG=true $(PYTHON) -c "from core.enricher import enrich; \
 	              from core.formatter import print_terminal, print_summary; \
 	              from core.fetcher import fetch_nvd; \
 	              from cache.store import CVECache; \

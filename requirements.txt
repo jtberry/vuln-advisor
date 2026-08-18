@@ -1,2 +1,11 @@
+# Runtime dependencies for the CLI and the core/ engine.
+#
+# core/config.py imports pydantic and pydantic-settings directly, and
+# core/fetcher.py imports core.config, so the CLI entry point (main.py) needs
+# both. They are declared here rather than only in requirements-api.txt --
+# `pip install -r requirements.txt && python main.py CVE-2021-44228` must work
+# on its own, and the smoke job in CI enforces that.
 requests>=2.28.0
 python-dotenv>=1.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0

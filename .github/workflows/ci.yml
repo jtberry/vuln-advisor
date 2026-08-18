@@ -96,6 +96,11 @@ jobs:
     name: Import Smoke Test
     runs-on: ubuntu-latest
 
+    # asgi -> api.main and auth.tokens both call get_settings() at import time,
+    # which raises unless DEBUG is set or a >=32 char SECRET_KEY is supplied.
+    env:
+      DEBUG: "true"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -105,11 +110,31 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Install runtime dependencies
+      # Step order matters: the CLI boundary must be checked BEFORE the API
+      # dependencies are present, otherwise it proves nothing.
+      - name: Install runtime dependencies only
         run: pip install -r requirements.txt
 
-      - name: Verify package imports cleanly
-        run: python -c "from core.fetcher import fetch_nvd, fetch_kev, fetch_epss, fetch_poc; from core.enricher import enrich; from core.formatter import print_terminal, to_json; print('All imports OK')"
+      # Guards the documented lightweight install. Importing main.py pulls the
+      # whole CLI path (cache.store, core.fetcher/formatter/models/pipeline),
+      # so if any of them grows a dependency that is not in requirements.txt,
+      # this fails. The previous version imported three leaf modules by name and
+      # missed exactly that -- core/fetcher.py started importing core.config,
+      # which needs pydantic-settings, and the job went red without anyone
+      # noticing because the run was already red elsewhere.
+      - name: CLI imports with runtime deps alone
+        run: |
+          python -c "import main; print('CLI imports OK')"
+          python main.py --help > /dev/null && echo "CLI --help OK"
+
+      - name: Install API dependencies
+        run: pip install -r requirements-api.txt
+
+      # asgi.py is what uvicorn actually loads -- it is the only module that
+      # assembles both api/ and web/. A broken import in web/routes.py would
+      # pass the CLI check above and still take the server down.
+      - name: ASGI app assembles with API deps
+        run: python -c "import asgi; assert asgi.app is not None; print('ASGI app OK')"
 
   unit-tests:
     name: Unit Tests
