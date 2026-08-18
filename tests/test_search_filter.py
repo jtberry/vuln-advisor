@@ -35,10 +35,25 @@ across all structure tests.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+
+# Minimal NVD payload, mirroring _MINIMAL_CVE_RAW in tests/test_pipeline.py.
+# enrich() needs only these keys to produce an EnrichedCVE.
+_MINIMAL_CVE_RAW = {
+    "id": "CVE-2021-44228",
+    "descriptions": [{"lang": "en", "value": "Test description."}],
+    "metrics": {},
+    "weaknesses": [],
+    "configurations": [],
+    "references": [],
+}
+_EPSS_DATA = {"score": 0.5, "percentile": 0.9}
+_POC_DATA = {"has_poc": True, "count": 2, "sources": ["GitHub"]}
 
 # ---------------------------------------------------------------------------
 # Module-scoped fixture: create one asset and fetch /assets page
@@ -195,12 +210,9 @@ def asset_detail_page(web_client: tuple[TestClient, str]) -> tuple[str, int]:
     client, token = web_client
 
     # Configure the mock cache to return None (cache miss) so process_cves()
-    # falls through to the real fetch path. Without this, MagicMock.get() returns
+    # falls through to the fetch path. Without this, MagicMock.get() returns
     # a truthy MagicMock which is treated as a cache hit, and the returned mock
     # object's attributes fail SQLAlchemy's type binding.
-    # Note: fetch_nvd() will also return None in tests (no real HTTP), so we get
-    # a None EnrichedCVE -- the route handles this gracefully by skipping that CVE.
-    # We only need the HTML structure (data-* attrs), not real enrichment data.
     app.state.cache.get.return_value = None
 
     # Create a new asset (separate from the one in assets_page to avoid state bleed)
@@ -220,11 +232,24 @@ def asset_detail_page(web_client: tuple[TestClient, str]) -> tuple[str, int]:
 
     # Link a vulnerability via the API.
     # Field name is "ids" (not "cve_ids") per AssetVulnAssign model in api/models.py.
-    vuln_resp = client.post(
-        f"/api/v1/assets/{asset_id}/vulnerabilities",
-        json={"ids": ["CVE-2021-44228"]},
-        headers={"Authorization": "Bearer " + token},
-    )
+    #
+    # The fetchers MUST be patched. Unpatched, process_cves() makes a live call
+    # to the NVD API; wherever NVD is unreachable, rate-limited (5 req/30s
+    # unauthenticated), or slow, fetch_nvd() returns None, the route skips the
+    # CVE, no vuln row is created, and asset_detail.html's `{% if vuln_rows %}`
+    # block never renders -- so every structural assertion below fails. Patching
+    # here follows the same pattern as tests/test_pipeline.py and makes these
+    # tests hermetic.
+    with (
+        patch("core.pipeline.fetch_nvd", return_value=_MINIMAL_CVE_RAW),
+        patch("core.pipeline.fetch_epss", return_value=_EPSS_DATA),
+        patch("core.pipeline.fetch_poc", return_value=_POC_DATA),
+    ):
+        vuln_resp = client.post(
+            f"/api/v1/assets/{asset_id}/vulnerabilities",
+            json={"ids": ["CVE-2021-44228"]},
+            headers={"Authorization": "Bearer " + token},
+        )
     assert vuln_resp.status_code in (
         200,
         201,

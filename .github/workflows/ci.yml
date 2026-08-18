@@ -115,6 +115,13 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
 
+    # tests/conftest.py sets DEBUG via os.environ.setdefault, which only works
+    # if nothing imports core.config before conftest line 30 runs. Setting it
+    # here removes that import-order dependency -- without DEBUG, get_settings()
+    # raises ValueError("SECRET_KEY is required in production mode").
+    env:
+      DEBUG: "true"
+
     steps:
       - uses: actions/checkout@v4
 
@@ -122,8 +129,11 @@ jobs:
         with:
           python-version: "3.9"
 
+      # requirements-api.txt is required, not optional: tests/conftest.py
+      # imports fastapi.testclient, api.main, auth.store and cmdb.store at
+      # module scope, so the whole suite fails to collect without it.
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-api.txt -r requirements-test.txt
 
       - name: pytest with coverage
         run: pytest

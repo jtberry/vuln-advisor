@@ -11,8 +11,14 @@ from __future__ import annotations
 
 import inspect
 import subprocess
+from pathlib import Path
 
 from core.config import Settings
+
+# Repo root, derived from this file's location. Never hardcode an absolute
+# path here -- the test has to run on CI, in Docker, and on any contributor's
+# machine, not just the one it was written on.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------------------
 # DEBT-05: /account/api-keys route
@@ -104,7 +110,7 @@ def test_smoke_target_exits_zero():
         ["make", "smoke"],
         capture_output=True,
         text=True,
-        cwd="/mnt/c/Users/Jason/scripts/new_project",
+        cwd=_REPO_ROOT,
     )
     assert result.returncode == 0, (
         f"make smoke failed with exit code {result.returncode}.\n"
