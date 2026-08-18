@@ -40,8 +40,6 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
-
 # Minimal NVD payload, mirroring _MINIMAL_CVE_RAW in tests/test_pipeline.py.
 # enrich() needs only these keys to produce an EnrichedCVE.
 _MINIMAL_CVE_RAW = {
@@ -209,11 +207,11 @@ def asset_detail_page(web_client: tuple[TestClient, str]) -> tuple[str, int]:
     """
     client, token = web_client
 
-    # Configure the mock cache to return None (cache miss) so process_cves()
-    # falls through to the fetch path. Without this, MagicMock.get() returns
-    # a truthy MagicMock which is treated as a cache hit, and the returned mock
-    # object's attributes fail SQLAlchemy's type binding.
-    app.state.cache.get.return_value = None
+    # No cache stubbing needed: app.state.cache is a real in-memory CVECache
+    # (see tests/conftest.py), so an unseeded lookup is a genuine miss and
+    # process_cves() falls through to the patched fetchers below. This used to
+    # be `app.state.cache.get.return_value = None`, a workaround for the
+    # MagicMock cache that reported every lookup as a hit.
 
     # Create a new asset (separate from the one in assets_page to avoid state bleed)
     resp = client.post(
