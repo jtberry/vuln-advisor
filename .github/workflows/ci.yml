@@ -160,8 +160,28 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-api.txt -r requirements-test.txt
 
+      # Coverage flags live here, not in pyproject addopts, so running a single
+      # file locally does not fail a global gate. Scope and branch=true come
+      # from [tool.coverage.run].
       - name: pytest with coverage
-        run: pytest
+        run: pytest --cov --cov-report=term-missing
+
+      # The only enforced floor. Carried over unchanged from the previous
+      # config, now measured with branch coverage on. Everything else is
+      # reported but not gated -- the repo-wide ratchet lands in M12.
+      - name: Coverage floor -- previously gated modules
+        run: coverage report --include="core/enricher.py,core/pipeline.py,cmdb/ingest.py" --fail-under=80
+
+      # Report only. Prints the repo-wide figure next to the committed baseline
+      # so a drift is visible in the log even before the ratchet exists.
+      - name: Repo-wide coverage vs baseline (report only)
+        run: |
+          MEASURED=$(coverage report --format=total)
+          BASELINE=$(grep -E '^[0-9]+$' coverage-baseline.txt | head -1)
+          echo "repo-wide coverage: ${MEASURED}%  (committed baseline: ${BASELINE}%)"
+          if [ "$MEASURED" -lt "$BASELINE" ]; then
+            echo "::warning::Coverage ${MEASURED}% is below the committed baseline ${BASELINE}%. Not gated yet -- M12 turns this into a hard failure."
+          fi
 
   container-scan:
     name: Container Scan (Trivy)

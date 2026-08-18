@@ -75,7 +75,10 @@ smoke: ## Verify all modules import cleanly
 check: lint security smoke ## Run all quality checks (lint + security + smoke)
 
 test: ## Run unit tests with coverage report
-	pytest
+	# Coverage flags live here rather than in pyproject addopts, so a bare
+	# `pytest tests/test_enricher.py` during development does not fail a
+	# whole-repo gate. Scope and branch=true come from [tool.coverage.run].
+	DEBUG=true pytest --cov --cov-report=term-missing
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 

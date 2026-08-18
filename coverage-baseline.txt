@@ -1,0 +1,64 @@
+50
+# Repo-wide coverage baseline (percent, branch coverage on).
+#
+# The bare integer on the first line is the value CI reads. Everything below is
+# documentation. Keep the number on line 1.
+#
+# ---------------------------------------------------------------------------
+# What this is
+# ---------------------------------------------------------------------------
+# The first honest measurement of this codebase. The previous configuration
+# gated 80% against core.enricher + core.pipeline + cmdb.ingest only -- roughly
+# 860 of ~8,270 lines, about 10% of the repo -- so the number looked strict
+# while auth/, api/, web/, cache/, core/formatter.py and the CLI were entirely
+# unmeasured.
+#
+# Measured at 213 tests, branch coverage enabled:
+#
+#   TOTAL   2837 stmts   1293 miss   718 branch   54 brpart   50%
+#
+# ---------------------------------------------------------------------------
+# Where the gaps are (lowest first)
+# ---------------------------------------------------------------------------
+#   asgi.py                    0%   never imported by the suite
+#   main.py                    0%   the CLI, the documented primary entry point
+#   core/formatter.py         22%   only _sanitize_csv_cell is covered
+#   core/fetcher.py           24%   all outbound HTTP, the untrusted boundary
+#   api/routes/v1/cve.py      24%   public and unauthenticated
+#   web/routes.py             26%   ~5 of 30 route handlers touched
+#   auth/oauth.py             33%   email-verification gates untested
+#   api/routes/v1/auth.py     38%
+#   api/routes/v1/dashboard   39%
+#   api/routes/v1/assets.py   41%
+#   auth/store.py             51%   IDOR guard and settings allowlist untested
+#   api/main.py               58%
+#   auth/dependencies.py      65%
+#   auth/tokens.py            65%   JWT rejection, API key HMAC untested
+#   cmdb/store.py             77%
+#   cache/store.py            78%
+#   core/config.py            92%
+#   api/models.py             94%
+#   core/enricher.py          99%   the triage matrix, exhaustively tested
+#   cmdb/ingest.py           100%
+#   core/pipeline.py         100%
+#
+# ---------------------------------------------------------------------------
+# On the 80% floor
+# ---------------------------------------------------------------------------
+# Turning on branch coverage was expected to push the three previously-gated
+# modules below 80 and force a re-baseline. Measured, it barely moved them:
+# enricher 99%, pipeline 100%, ingest 100%, combined 99%. The floor therefore
+# carries over unchanged and stays enforced in CI.
+#
+# ---------------------------------------------------------------------------
+# How this number is used
+# ---------------------------------------------------------------------------
+# Today: reported only. CI prints the measured figure beside this baseline and
+# emits a warning on a drop. Nothing fails.
+#
+# M12 turns it into a ratchet -- fail on a decrease, bump this file on merge to
+# develop. Raise it when coverage genuinely improves; do not lower it to make a
+# red build green.
+#
+# Note this is measured on the CI interpreter (Python 3.9). A local run on a
+# newer Python can differ by a point or two.
