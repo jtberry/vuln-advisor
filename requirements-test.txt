@@ -1,0 +1,13 @@
+# Test dependencies -- the minimum needed to run pytest.
+#
+# Split out of requirements-dev.txt so CI's unit-tests job installs only what
+# it needs. Pulling the full dev toolchain (semgrep, bandit, pip-audit, black,
+# isort, ruff, pre-commit) into a test job costs minutes and gains nothing.
+#
+# NOTE: the suite also needs the API stack. tests/conftest.py imports
+# fastapi.testclient, api.main, auth.store and cmdb.store at module scope, and
+# even the pure tests reach it transitively (tests/test_ingest.py ->
+# cmdb/ingest.py -> core/config.py -> pydantic_settings). Install alongside:
+#   pip install -r requirements.txt -r requirements-api.txt -r requirements-test.txt
+pytest>=7.4.0
+pytest-cov>=4.0.0

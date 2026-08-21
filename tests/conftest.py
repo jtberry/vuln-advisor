@@ -23,7 +23,9 @@ import asyncio
 import os
 from collections.abc import Generator
 from contextlib import asynccontextmanager
+from typing import Callable
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 # CRITICAL: Set DEBUG before any auth/core import so get_settings() can
 # auto-generate SECRET_KEY in dev mode instead of raising ValueError.
@@ -36,6 +38,7 @@ from api.main import app
 from auth.models import User
 from auth.store import UserStore
 from auth.tokens import create_access_token, hash_password
+from cache.store import CVECache
 from cmdb.store import CMDBStore
 
 # ---------------------------------------------------------------------------
@@ -89,15 +92,35 @@ def _patch_lifespan(user_store: UserStore, cmdb: CMDBStore):
 
     @asynccontextmanager
     async def test_lifespan(app):
+        # A real cache, NOT a MagicMock.
+        #
+        # core/pipeline.py does `cached = cache.get(cve_id); if cached is not
+        # None:` -- a bare MagicMock returns a truthy mock from .get() and
+        # supports __getitem__, so every route calling process_cve took the
+        # cache-hit branch with mock payloads. The response layer then coerced
+        # those mocks into empty values and returned 200 with garbage
+        # (`GET /api/v1/cve/CVE-2021-44228` -> 200 with `"id": []`), rather
+        # than failing loudly. That is why api/routes/v1/cve.py had no tests:
+        # any assertion stronger than `status_code == 200` was impossible.
+        #
+        # ":memory:" is per-connection, which is fine here -- CVECache holds a
+        # single sqlite3 connection with check_same_thread=False, so the
+        # TestClient thread pool shares one instance. (Contrast the named
+        # shared-memory URIs the SQLAlchemy stores need, explained above.)
+        cache = CVECache(db_path=":memory:", ttl=3600)
+
         app.state.user_store = user_store
         app.state.cmdb = cmdb
-        app.state.cache = MagicMock()
+        app.state.cache = cache
         app.state.kev_set = set()
         app.state.setup_required = False
+        # oauth stays mocked on purpose -- it prevents real network calls to
+        # the provider during tests. Unlike the cache, nothing reads through it.
         app.state.oauth = MagicMock()
         app.state.purge_task = asyncio.create_task(asyncio.sleep(99999))
         yield
         app.state.purge_task.cancel()
+        cache.close()
 
     return test_lifespan
 
@@ -129,11 +152,16 @@ def api_client() -> Generator[tuple[TestClient, str, int], None, None]:
     # Generate a long-lived JWT for test requests
     token = create_access_token(user_id=uid, username="testadmin", role="admin", expire_seconds=3600)
 
+    # Capture and restore: app is a module-level singleton, so leaving a patched
+    # lifespan behind hands the next test module a context bound to stores this
+    # fixture already closed.
+    original_lifespan = app.router.lifespan_context
     app.router.lifespan_context = _patch_lifespan(user_store, cmdb)
 
     with TestClient(app, base_url="http://localhost", raise_server_exceptions=True) as client:
         yield client, token, uid
 
+    app.router.lifespan_context = original_lifespan
     user_store.close()
     cmdb.close()
 
@@ -161,10 +189,88 @@ def web_client() -> Generator[tuple[TestClient, str], None, None]:
 
     token = create_access_token(user_id=uid, username="webadmin", role="admin", expire_seconds=3600)
 
+    original_lifespan = app.router.lifespan_context
     app.router.lifespan_context = _patch_lifespan(user_store, cmdb)
 
     with TestClient(app, base_url="http://localhost", follow_redirects=False, raise_server_exceptions=True) as client:
         yield client, token
 
+    app.router.lifespan_context = original_lifespan
     user_store.close()
     cmdb.close()
+
+
+# ---------------------------------------------------------------------------
+# Function-scoped factory -- for tests that create or mutate data
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def client_factory() -> Generator[Callable[..., tuple[TestClient, str, int]], None, None]:
+    """Yield a factory producing isolated TestClients, one database each.
+
+    Use this for any test that creates or mutates data. The module-scoped
+    api_client/web_client fixtures share a single database across every test in
+    a file, so tests observe each other's writes and become order-dependent.
+    That is why test_api_routes.py asserts `isinstance(data, list)` rather than
+    an exact count -- the shared state makes a stronger assertion impossible.
+
+    Each call gets a uuid4 database suffix, so two *tests* can create the same
+    hostname without colliding.
+
+    ONE LIVE CLIENT PER TEST. `app` is a module-level singleton and the lifespan
+    writes the stores onto `app.state`, which is shared process-wide. Starting a
+    second client rebinds app.state.cmdb / app.state.user_store, and the first
+    client silently starts reading the second one's database -- two simultaneous
+    clients are aliases, not isolated peers. A second call while one is live
+    raises rather than quietly returning something wrong.
+
+    Args accepted by the returned factory:
+        db_suffix:        override the generated suffix (default: uuid4 hex)
+        follow_redirects: False to assert on redirect Locations (default True)
+        username / role:  the seeded user (default an admin)
+    """
+    created: list = []
+    original_lifespan = app.router.lifespan_context
+
+    def _make(
+        db_suffix: str = "",
+        follow_redirects: bool = True,
+        username: str = "factoryadmin",
+        role: str = "admin",
+    ) -> tuple[TestClient, str, int]:
+        if created:
+            raise RuntimeError(
+                "client_factory supports one live client per test. app.state is "
+                "process-wide, so a second client rebinds the stores and both "
+                "clients end up reading the newest database. Split the test in two -- "
+                "each test function gets its own factory instance."
+            )
+
+        suffix = db_suffix or uuid4().hex
+        user_store, cmdb = _make_test_stores(suffix)
+
+        user = User(username=username, hashed_password=hash_password("factorypass123"), role=role)
+        uid = user_store.create_user(user)
+        token = create_access_token(user_id=uid, username=username, role=role, expire_seconds=3600)
+
+        app.router.lifespan_context = _patch_lifespan(user_store, cmdb)
+        # Entered manually rather than via `with` so the client stays open for
+        # the body of the test; teardown below closes it.
+        ctx = TestClient(
+            app,
+            base_url="http://localhost",
+            follow_redirects=follow_redirects,
+            raise_server_exceptions=True,
+        )
+        client = ctx.__enter__()
+        created.append((ctx, user_store, cmdb))
+        return client, token, uid
+
+    yield _make
+
+    for ctx, user_store, cmdb in reversed(created):
+        ctx.__exit__(None, None, None)
+        user_store.close()
+        cmdb.close()
+    app.router.lifespan_context = original_lifespan

@@ -120,6 +120,15 @@ class Settings(BaseSettings):
     domain: str = "localhost"
 
     # ------------------------------------------------------------------
+    # NVD API (optional)
+    # ------------------------------------------------------------------
+
+    # Optional NVD API key. Raises rate limit from 5 req/30s to 50 req/30s.
+    # Empty string means unauthenticated NVD calls. Free key available at:
+    # https://nvd.nist.gov/developers/request-an-api-key
+    nvd_api_key: str = ""
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
 

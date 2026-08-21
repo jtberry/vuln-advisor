@@ -41,4 +41,50 @@ skips = ["*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=core.enricher --cov=core.pipeline --cov=cmdb.ingest --cov-report=term-missing --cov-fail-under=80"
+# Coverage flags deliberately do NOT live here.
+#
+# With --cov-fail-under in addopts, running a single file (`pytest
+# tests/test_enricher.py`) fails the global gate spuriously, because one file
+# cannot cover the whole codebase. That trains people to pass --no-cov, and then
+# to stop looking at coverage at all. CI and `make test` pass the flags
+# explicitly instead; a bare `pytest` just runs the tests.
+#
+# It also means bare `pytest` no longer hard-fails when pytest-cov is absent.
+addopts = "-q --strict-markers"
+
+# ---------------------------------------------------------------------------
+# Coverage
+#
+# Scope is the whole repo, not three modules. The previous configuration
+# measured core.enricher + core.pipeline + cmdb.ingest -- about 860 of ~8,270
+# lines -- so an 80% gate described roughly 10% of the codebase while auth/,
+# api/, web/, cache/, core/formatter.py and the CLI went unmeasured.
+#
+# branch = true counts branch coverage, not just statements. It was expected to
+# drop the three previously-gated modules below their 80 floor; measured, it
+# barely moved them (enricher 99%, pipeline 100%, ingest 100%, combined 99%), so
+# that floor carries over unchanged. See coverage-baseline.txt.
+#
+# This milestone measures only. Enforcement (per-module floors plus a ratchet
+# against coverage-baseline.txt) is deferred to M12 -- there is no point gating
+# a number nobody has seen yet.
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = [
+    "tests/*",
+    ".venv*/*",
+    "venv/*",
+    "*/site-packages/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

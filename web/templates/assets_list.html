@@ -26,21 +26,128 @@
 
 {# ── Asset table ─────────────────────────────────────────────────── #}
 {% if assets %}
-<div class="card">
+{#
+  id="asset-table-card" is the mount point for the vanilla JS AssetTableFilter
+  class defined in components.js. The class reads DOM data-* attributes from
+  rows and drives visibility/ordering without any framework dependency.
+
+  Pattern: Data-down / Events-up (DDEU). Server renders all rows; JS
+  reads data-* attributes and drives visibility without server round-trips.
+  Scale constraint: client-side filtering targets < ~500 assets.
+#}
+<div class="card" id="asset-table-card">
+
+  {# ── Search and filter toolbar ─────────────────────────────────── #}
+  <div class="card-header py-2 px-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+      {# Search input -- left side #}
+      <div class="d-flex align-items-center gap-2">
+        <div class="position-relative">
+          <input type="text"
+                 id="asset-search-input"
+                 class="form-control form-control-sm"
+                 placeholder="Search hostname, name, IP..."
+                 style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: 240px; padding-right: 28px">
+          {# Clear X button -- hidden initially; components.js toggles visibility #}
+          <span id="asset-clear-search"
+                style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #8b949e; font-size: 0.75rem; display: none"
+                title="Clear search">&times;</span>
+        </div>
+        {# Result count -- components.js sets textContent on this element #}
+        <span id="asset-count-label"
+              style="color: #8b949e; font-size: 0.82rem; white-space: nowrap"></span>
+      </div>
+
+      {# Filter dropdowns -- right side #}
+      <div class="d-flex align-items-center gap-2">
+        <select id="asset-crit-select"
+                class="form-select form-select-sm"
+                style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
+          <option value="">All Criticalities</option>
+          <option value="critical">Critical</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select id="asset-env-select"
+                class="form-select form-select-sm"
+                style="background-color: #21262d; border-color: #30363d; color: #c9d1d9; font-size: 0.82rem; width: auto">
+          <option value="">All Environments</option>
+          <option value="production">Production</option>
+          <option value="staging">Staging</option>
+          <option value="development">Development</option>
+        </select>
+        {# Clear filters link -- hidden initially; components.js toggles visibility #}
+        <a id="asset-clear-filters"
+           href="javascript:void(0)"
+           style="font-size: 0.82rem; color: #58a6ff; white-space: nowrap; display: none">Clear filters</a>
+      </div>
+
+    </div>
+  </div>
+
   <div class="card-body p-0">
     <table class="table table-hover mb-0">
       <thead>
         <tr>
-          <th style="padding-left: 1rem; min-width: 200px">Hostname</th>
+          {#
+            Sortable headers use id attributes wired by components.js.
+            Sort indicators use data-sort-col/data-sort-type attributes,
+            managed imperatively by _updateSortIndicators() in components.js.
+            IP and Exposure are not sortable (text search covers IP lookup).
+          #}
+          <th id="sort-hostname"
+              style="padding-left: 1rem; min-width: 200px; cursor: pointer; user-select: none">
+            Hostname
+            <span data-sort-col="hostname" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="hostname" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="hostname" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
+          </th>
           <th>IP</th>
-          <th>Environment</th>
+          <th id="sort-environment"
+              style="cursor: pointer; user-select: none">
+            Environment
+            <span data-sort-col="environment" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="environment" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="environment" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
+          </th>
           <th>Exposure</th>
-          <th>Criticality</th>
+          <th id="sort-criticality"
+              style="cursor: pointer; user-select: none">
+            Criticality
+            <span data-sort-col="criticality" data-sort-type="inactive"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #8b949e">&#x25B2;&#x25BC;</span>
+            <span data-sort-col="criticality" data-sort-type="asc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25B2;</span>
+            <span data-sort-col="criticality" data-sort-type="desc"
+                  style="display: none; font-size: 0.6rem; margin-left: 2px; color: #58a6ff">&#x25BC;</span>
+          </th>
         </tr>
       </thead>
       <tbody>
         {% for asset in assets %}
-        <tr>
+        {#
+          data-row: selector used by components.js to find all asset rows.
+          data-hostname/ip/name: lowercased in the template for consistent
+            substring matching. data-name mirrors hostname (assets don't
+            have a separate display name field).
+          data-criticality/environment: exact-match filter fields.
+          data-vuln-count: reserved for future vuln-count sort (set to 0 now).
+        #}
+        <tr data-row
+            data-hostname="{{ asset.hostname | lower }}"
+            data-ip="{{ (asset.ip or '') | lower }}"
+            data-name="{{ asset.hostname | lower }}"
+            data-criticality="{{ asset.criticality }}"
+            data-environment="{{ asset.environment }}"
+            data-vuln-count="0">
           <td style="padding-left: 1rem">
             <a href="/assets/{{ asset.id }}"
                class="fw-semibold font-mono text-decoration-none"
@@ -72,6 +179,18 @@
           </td>
         </tr>
         {% endfor %}
+        {#
+          No-results empty state: shown when filters match nothing but rows exist.
+          style="display: none" is the initial state; components.js toggles it.
+        #}
+        <tr id="asset-no-results" style="display: none">
+          <td colspan="5" class="text-center py-4">
+            <div style="color: #8b949e; font-size: 0.85rem">No assets match the current filters</div>
+            <a id="asset-no-results-clear"
+               href="javascript:void(0)"
+               style="font-size: 0.82rem; color: #58a6ff">Clear all filters</a>
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>

@@ -57,18 +57,28 @@ security: ## Run security checks (bandit + pip-audit + semgrep)
 	semgrep scan --config "p/python" --config "p/fastapi" --error --quiet .
 
 smoke: ## Verify all modules import cleanly
-	$(PYTHON) -c "from core.enricher import enrich; \
+	# DEBUG=true is required, not optional: auth.tokens and web.routes call
+	# get_settings() at import time, which raises without a >=32 char SECRET_KEY.
+	# This target only checks that modules import, so dev mode is the right
+	# context -- without it `make smoke` and `make check` fail for any
+	# contributor who has not yet created a .env.
+	DEBUG=true $(PYTHON) -c "from core.enricher import enrich; \
 	              from core.formatter import print_terminal, print_summary; \
 	              from core.fetcher import fetch_nvd; \
 	              from cache.store import CVECache; \
 	              from cmdb.store import CMDBStore; \
 	              from cmdb.ingest import parse_csv, parse_trivy_json; \
+	              from auth.tokens import create_access_token; \
+	              from web.routes import router; \
 	              print('  All imports OK')"
 
 check: lint security smoke ## Run all quality checks (lint + security + smoke)
 
 test: ## Run unit tests with coverage report
-	pytest
+	# Coverage flags live here rather than in pyproject addopts, so a bare
+	# `pytest tests/test_enricher.py` during development does not fail a
+	# whole-repo gate. Scope and branch=true come from [tool.coverage.run].
+	DEBUG=true pytest --cov --cov-report=term-missing
 
 # ── Run ───────────────────────────────────────────────────────────────────────
 
